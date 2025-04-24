@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Use loop_scope instead of scope for the asyncio marker
-pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="session")]
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 async def test_login_password_authentication(mcp_server):

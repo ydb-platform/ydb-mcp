@@ -50,7 +50,7 @@ class TestYDBConnection(unittest.TestCase):
         )
         mock_driver_class.return_value = mock_driver
 
-        with patch("ydb.SessionPool") as mock_session_pool_class:
+        with patch("ydb.aio.QuerySessionPool") as mock_session_pool_class:
             # Setup session pool mock
             mock_session_pool = MagicMock()
             mock_session_pool_class.return_value = mock_session_pool
@@ -89,7 +89,7 @@ class TestYDBConnection(unittest.TestCase):
         )
         mock_driver_class.return_value = mock_driver
 
-        with patch("ydb.SessionPool") as mock_session_pool_class:
+        with patch("ydb.aio.QuerySessionPool") as mock_session_pool_class:
             # Setup session pool mock
             mock_session_pool = MagicMock()
             mock_session_pool_class.return_value = mock_session_pool
@@ -130,7 +130,7 @@ class TestYDBConnection(unittest.TestCase):
         )
         mock_driver_class.return_value = mock_driver
 
-        with patch("ydb.SessionPool") as mock_session_pool_class:
+        with patch("ydb.aio.QuerySessionPool") as mock_session_pool_class:
             # Setup session pool mock
             mock_session_pool = MagicMock()
             mock_session_pool_class.return_value = mock_session_pool

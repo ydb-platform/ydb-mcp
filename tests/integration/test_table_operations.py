@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Mark these tests as integration and asyncio tests
-pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="session")]
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 # We'll use the root directory which should already exist
 ROOT_DIR = "/"

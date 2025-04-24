@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Mark these tests as integration and asyncio tests
-pytestmark = [pytest.mark.integration, pytest.mark.asyncio(scope="session")]
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 def parse_text_content(response):

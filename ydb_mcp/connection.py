@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 import ydb
+from ydb.aio import QuerySessionPool
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class YDBConnection:
         """
         self.connection_string = connection_string
         self.driver: Optional[ydb.Driver] = None
-        self.session_pool: Optional[ydb.SessionPool] = None
+        self.session_pool: Optional[ydb.aio.QuerySessionPool] = None
         self._database = database
         self.last_error = None
 
@@ -68,7 +69,7 @@ class YDBConnection:
 
         return endpoint, database
 
-    async def connect(self) -> Tuple[ydb.Driver, ydb.SessionPool]:
+    async def connect(self) -> Tuple[ydb.Driver, ydb.aio.QuerySessionPool]:
         """Connect to YDB and setup session pool asynchronously.
 
         Returns:
@@ -104,7 +105,7 @@ class YDBConnection:
             logger.info("Connected to YDB successfully")
 
             # Create session pool
-            self.session_pool = ydb.SessionPool(self.driver)
+            self.session_pool = ydb.aio.QuerySessionPool(self.driver)
 
             return self.driver, self.session_pool
 

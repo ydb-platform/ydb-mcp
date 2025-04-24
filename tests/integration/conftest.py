@@ -42,9 +42,6 @@ server_logger.setLevel(logging.ERROR)  # Raise server logger level to ERROR
 asyncio_logger = logging.getLogger("asyncio")
 asyncio_logger.setLevel(logging.ERROR)
 
-# Use pytest-asyncio's built-in event_loop fixture
-pytestmark = pytest.mark.asyncio(scope="session")
-
 
 async def cleanup_pending_tasks():
     """Clean up any pending tasks in the current event loop."""
