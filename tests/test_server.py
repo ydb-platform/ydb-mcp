@@ -25,7 +25,6 @@ from ydb_mcp.server import CustomJSONEncoder, YDBMCPServer
 
 
 @pytest.mark.unit
-@pytest.mark.asyncio
 class TestYDBMCPServer:
     """Test YDB MCP server implementation."""
 
@@ -558,7 +557,7 @@ class TestYDBMCPServer:
         assert decoded["regular"] == "string"
         assert decoded["number"] == 42
 
-    async def test_process_result_set_error(self):
+    def test_process_result_set_error(self):
         """Test result set processing when an error occurs."""
         with patch.object(YDBMCPServer, "register_tools"):
             server = YDBMCPServer()

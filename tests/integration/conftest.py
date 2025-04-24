@@ -17,8 +17,8 @@ from urllib.parse import urlparse
 import pytest
 import ydb
 
-from ydb_mcp.patches import suppress_task_destroyed_warning
 from ydb_mcp.server import AUTH_MODE_ANONYMOUS, YDBMCPServer
+from tests.docker_utils import start_ydb_container, stop_container, wait_for_port
 
 # Configuration for the tests
 YDB_ENDPOINT = os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136/local")
@@ -45,98 +45,102 @@ asyncio_logger.setLevel(logging.ERROR)
 
 async def cleanup_pending_tasks():
     """Clean up any pending tasks in the current event loop."""
-    with suppress_task_destroyed_warning():
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running event loop
-            return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running event loop
+        return
 
-        # Get all pending tasks except the current one
-        current = asyncio.current_task(loop)
-        pending = [
-            task for task in asyncio.all_tasks(loop) if not task.done() and task is not current
-        ]
+    # Get all pending tasks except the current one
+    current = asyncio.current_task(loop)
+    pending = [
+        task for task in asyncio.all_tasks(loop) if not task.done() and task is not current
+    ]
 
-        if not pending:
-            return
+    # Explicitly suppress destroy pending warning for YDB Discovery.run tasks
+    for task in pending:
+        coro = getattr(task, 'get_coro', lambda: None)()
+        if coro and 'Discovery.run' in repr(coro):
+            task._log_destroy_pending = False
 
-        logger.debug(f"Cleaning up {len(pending)} pending tasks")
+    if not pending:
+        return
 
-        # Cancel all pending tasks
-        for task in pending:
-            if not task.done() and not task.cancelled():
-                # Disable the destroy pending warning for this task
-                task._log_destroy_pending = False
+    logger.debug(f"Cleaning up {len(pending)} pending tasks")
+
+    # Cancel all pending tasks
+    for task in pending:
+        if not task.done() and not task.cancelled():
+            # Disable the destroy pending warning for this task
+            task._log_destroy_pending = False
+            task.cancel()
+
+    try:
+        # Wait for tasks to cancel with a timeout, using shield to prevent cancellation
+        await asyncio.shield(asyncio.wait(pending, timeout=0.1))
+    except Exception as e:
+        logger.debug(f"Error waiting for tasks to cancel: {e}")
+
+    # Force cancel any remaining tasks
+    still_pending = [t for t in pending if not t.done()]
+    if still_pending:
+        logger.debug(
+            f"Force cancelling {len(still_pending)} tasks that did not cancel properly"
+        )
+        for task in still_pending:
+            # Ensure the task won't log warnings when destroyed
+            task._log_destroy_pending = False
+            # Force cancel and suppress any errors
+            with suppress(asyncio.CancelledError, Exception):
                 task.cancel()
-
-        try:
-            # Wait for tasks to cancel with a timeout, using shield to prevent cancellation
-            await asyncio.shield(asyncio.wait(pending, timeout=0.1))
-        except Exception as e:
-            logger.debug(f"Error waiting for tasks to cancel: {e}")
-
-        # Force cancel any remaining tasks
-        still_pending = [t for t in pending if not t.done()]
-        if still_pending:
-            logger.debug(
-                f"Force cancelling {len(still_pending)} tasks that did not cancel properly"
-            )
-            for task in still_pending:
-                # Ensure the task won't log warnings when destroyed
-                task._log_destroy_pending = False
-                # Force cancel and suppress any errors
-                with suppress(asyncio.CancelledError, Exception):
-                    task.cancel()
-                    try:
-                        await asyncio.shield(asyncio.wait_for(task, timeout=0.1))
-                    except asyncio.TimeoutError:
-                        pass
+                try:
+                    await asyncio.shield(asyncio.wait_for(task, timeout=0.1))
+                except asyncio.TimeoutError:
+                    pass
 
 
 async def cleanup_driver(driver, timeout=1.0):
     """Clean up the driver and any associated tasks."""
-    with suppress_task_destroyed_warning():
-        if not driver:
-            return
+    if not driver:
+        return
 
-        try:
-            # First handle discovery task if it exists
-            if hasattr(driver, "_discovery") and driver._discovery:
-                logger.debug("Handling discovery task")
-                try:
-                    # Try to stop discovery gracefully first
-                    if hasattr(driver._discovery, "stop"):
-                        driver._discovery.stop()
-
-                    # Then cancel the task if it exists and is still running
-                    if hasattr(driver._discovery, "_discovery_task"):
-                        task = driver._discovery._discovery_task
-                        if task and not task.done() and not task.cancelled():
-                            task._log_destroy_pending = False
-                            task.cancel()
-                            try:
-                                await asyncio.shield(asyncio.wait_for(task, timeout=0.1))
-                            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
-                                pass
-                except Exception as e:
-                    logger.debug(f"Error handling discovery task: {e}")
-
-            # Stop the driver with proper error handling
-            logger.debug("Stopping driver")
+    try:
+        # First handle discovery task if it exists
+        if hasattr(driver, "_discovery") and driver._discovery:
+            logger.debug("Handling discovery task")
             try:
-                # Use shield to prevent cancellation of the stop operation
-                await asyncio.shield(asyncio.wait_for(driver.stop(), timeout=timeout))
-            except asyncio.TimeoutError:
-                logger.debug(f"Driver stop timed out after {timeout} seconds")
-            except asyncio.CancelledError:
-                logger.debug("Driver stop was cancelled")
-            except Exception as e:
-                logger.debug(f"Error stopping driver: {e}")
+                # Try to stop discovery gracefully first
+                if hasattr(driver._discovery, "stop"):
+                    driver._discovery.stop()
 
-        finally:
-            # Clean up any remaining tasks
-            await cleanup_pending_tasks()
+                # Then cancel the task if it exists and is still running
+                if hasattr(driver._discovery, "_discovery_task"):
+                    task = driver._discovery._discovery_task
+                    if task and not task.done() and not task.cancelled():
+                        task._log_destroy_pending = False
+                        task.cancel()
+                        try:
+                            await asyncio.shield(asyncio.wait_for(task, timeout=0.1))
+                        except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                            pass
+            except Exception as e:
+                logger.debug(f"Error handling discovery task: {e}")
+
+        # Stop the driver with proper error handling
+        logger.debug("Stopping driver")
+        try:
+            # Use shield to prevent cancellation of the stop operation
+            await asyncio.shield(asyncio.wait_for(driver.stop(), timeout=timeout))
+        except asyncio.TimeoutError:
+            logger.debug(f"Driver stop timed out after {timeout} seconds")
+        except asyncio.CancelledError:
+            logger.debug("Driver stop was cancelled")
+        except Exception as e:
+            logger.debug(f"Error stopping driver: {e}")
+
+    finally:
+        # Clean up any remaining tasks
+        await cleanup_pending_tasks()
 
 
 def ensure_event_loop():
@@ -187,147 +191,20 @@ def ydb_server():
         yield None
         return
 
-    # If not running, try to start a Docker container with YDB
-    logger.info(f"YDB server is not running at {host}:{port}, trying to start Docker container")
-
-    try:
-        import docker
-
-        # Try multiple Docker connection methods
-        client = None
-        connection_errors = []
-
-        # Method 1: Try default Docker connection
-        try:
-            client = docker.from_env()
-            # Test connection
-            client.ping()
-            logger.info("Successfully connected to Docker using default environment settings")
-        except Exception as e:
-            connection_errors.append(f"Default: {str(e)}")
-            client = None
-
-        # Method 2: Try DOCKER_HOST environment variable if set
-        if client is None and os.environ.get("DOCKER_HOST"):
-            try:
-                client = docker.DockerClient(base_url=os.environ.get("DOCKER_HOST"))
-                # Test connection
-                client.ping()
-                logger.info(
-                    f"Successfully connected to Docker using DOCKER_HOST: {os.environ.get('DOCKER_HOST')}"
-                )
-            except Exception as e:
-                connection_errors.append(f"DOCKER_HOST: {str(e)}")
-                client = None
-
-        # Method 3: Try standard Unix socket locations
-        if client is None:
-            socket_paths = [
-                "unix:///var/run/docker.sock",  # Standard Docker socket
-                "unix://" + os.path.expanduser("~/.docker/run/docker.sock"),  # macOS/Docker Desktop
-                "unix://" + os.path.expanduser("~/.colima/default/docker.sock"),  # Colima
-            ]
-
-            for socket_path in socket_paths:
-                try:
-                    client = docker.DockerClient(base_url=socket_path)
-                    # Test connection
-                    client.ping()
-                    logger.info(f"Successfully connected to Docker using socket: {socket_path}")
-                    break
-                except Exception as e:
-                    connection_errors.append(f"{socket_path}: {str(e)}")
-                    client = None
-
-        if client is None:
-            error_details = "\n".join(connection_errors)
-            logger.error(f"Could not connect to Docker using any method. Errors:\n{error_details}")
-            pytest.fail("Could not connect to Docker. Make sure Docker daemon is running.")
-            return
-
-        # Verify Docker connection
-        version = client.version()
-        logger.info(f"Docker connection successful. Version: {version.get('Version', 'unknown')}")
-
-        # Start YDB container
-        logger.info("Starting YDB Docker container")
-        container = client.containers.run(
-            image="ydbplatform/local-ydb:latest",
-            detach=True,
-            remove=True,
-            hostname="localhost",
-            platform="linux/amd64",
-            ports={"2135/tcp": 2135, "2136/tcp": 2136, "8765/tcp": 8765, "9092/tcp": 9092},
-            environment={
-                "GRPC_TLS_PORT": "2135",
-                "GRPC_PORT": "2136",
-                "MON_PORT": "8765",
-                "YDB_KAFKA_PROXY_PORT": "9092",
-                "YDB_USE_IN_MEMORY_PDISKS": "1",
-            },
-        )
-
-        # Wait for YDB to be ready (simple check: port is open)
-        max_attempts = 30
-        attempt = 0
-        while attempt < max_attempts:
-            if is_port_open(host, port):
-                logger.info(f"YDB server is now running at {host}:{port}")
-                break
-            logger.info(f"Waiting for YDB server to start (attempt {attempt+1}/{max_attempts})...")
-            time.sleep(1)
-            attempt += 1
-
-        if attempt == max_attempts:
-            logger.error("Failed to start YDB server within timeout period")
-            container.stop()
-            pytest.fail("Could not start YDB server in Docker within timeout period")
-            return
-
-        # Give YDB a bit more time to initialize properly after port is open
-        time.sleep(5)
-
-        yield container
-
-        # Stop the container after tests
-        logger.info("Stopping YDB Docker container")
-        container.stop()
-
-    except (ImportError, ModuleNotFoundError):
-        logger.warning("Docker Python library not installed. Cannot start YDB container.")
-        pytest.fail("Docker Python library not installed. Install with: pip install docker")
-    except docker.errors.DockerException as e:
-        logger.warning(f"Docker error: {e}. Cannot start YDB container.")
-        # Print more detailed error information to help diagnose the Docker connection issue
-        logger.error(f"Docker connection details: Error type: {type(e)}, Error args: {e.args}")
-        pytest.fail(
-            f"Docker not available or not running: {e}. Make sure Docker daemon is running."
-        )
-    except Exception as e:
-        logger.warning(f"Failed to start YDB Docker container: {e}")
-        pytest.fail(f"Failed to start YDB container: {e}")
+    # If YDB is not running, start via docker_utils
+    logger.info(f"YDB server not running at {host}:{port}, starting Docker container")
+    container = start_ydb_container()
+    # Wait for YDB readiness
+    wait_for_port(host, port, timeout=30)
+    time.sleep(5)
+    yield container
+    logger.info("Stopping YDB Docker container")
+    stop_container(container)
 
 
 @pytest.fixture(scope="session")
 async def mcp_server(ydb_server):
     """Create a YDB MCP server instance for testing."""
-    # Check if the YDB server is available
-    endpoint_url = urlparse(YDB_ENDPOINT)
-    if endpoint_url.scheme in ("grpc", "grpcs"):
-        host_port = endpoint_url.netloc.split(":")
-        host = host_port[0]
-        port = int(host_port[1]) if len(host_port) > 1 else 2136
-    else:
-        host = "localhost"
-        port = 2136
-
-    if not is_port_open(host, port):
-        pytest.fail(
-            f"YDB server not available at {host}:{port}. Either start YDB manually or make sure Docker is running."
-        )
-        yield None
-        return
-
     # Create the server with anonymous credentials
     server = YDBMCPServer(endpoint=YDB_ENDPOINT, database=YDB_DATABASE)
 
@@ -361,23 +238,6 @@ _mcp_server_instance = None
 async def session_mcp_server(ydb_server):
     """Create a YDB MCP server instance once per test session and cache it."""
     global _mcp_server_instance
-
-    # Check if the YDB server is available
-    endpoint_url = urlparse(YDB_ENDPOINT)
-    if endpoint_url.scheme in ("grpc", "grpcs"):
-        host_port = endpoint_url.netloc.split(":")
-        host = host_port[0]
-        port = int(host_port[1]) if len(host_port) > 1 else 2136
-    else:
-        host = "localhost"
-        port = 2136
-
-    if not is_port_open(host, port):
-        pytest.fail(
-            f"YDB server not available at {host}:{port}. Either start YDB manually or make sure Docker is running."
-        )
-        yield None
-        return
 
     if _mcp_server_instance is None:
         # Create the server with anonymous credentials

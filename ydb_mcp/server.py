@@ -18,7 +18,6 @@ from mcp.types import TextContent
 from ydb.aio import Driver as AsyncDriver
 from ydb.aio import QuerySessionPool
 
-from ydb_mcp.patches import apply_all_patches
 from ydb_mcp.tool_manager import ToolManager
 
 logger = logging.getLogger(__name__)
@@ -147,9 +146,6 @@ class YDBMCPServer(FastMCP):
 
         # Initialize logging
         logging.basicConfig(level=logging.INFO)
-
-        # Apply YDB patches
-        apply_all_patches()
 
         # Register YDB tools
         self.register_tools()
@@ -672,11 +668,12 @@ class YDBMCPServer(FastMCP):
             path: Path to describe
 
         Returns:
-            List of TextContent objects with JSON-formatted path description
+            List of TextContent objects with path description
         """
         # Check for authentication errors
         if self.auth_error:
-            return [TextContent(type="text", text=json.dumps({"error": self.auth_error}, indent=2))]
+            safe_error = {"error": self.auth_error}
+            return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
         try:
             # Create driver if needed
@@ -684,11 +681,8 @@ class YDBMCPServer(FastMCP):
                 await self.create_driver()
 
             if self.driver is None:
-                return [
-                    TextContent(
-                        type="text", text=json.dumps({"error": "Failed to create driver"}, indent=2)
-                    )
-                ]
+                safe_error = {"error": "Failed to create driver"}
+                return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
             # Access the scheme client
             scheme_client = self.driver.scheme_client
@@ -697,13 +691,10 @@ class YDBMCPServer(FastMCP):
             logger.info(f"Describing path: {path}")
             path_response = await scheme_client.describe_path(path)
 
+            # Process the response
             if path_response is None:
-                return [
-                    TextContent(
-                        type="text",
-                        text=json.dumps({"error": f"Path '{path}' not found"}, indent=2),
-                    )
-                ]
+                safe_error = {"error": f"Path '{path}' not found"}
+                return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
             # Format the result
             result = {
@@ -721,52 +712,165 @@ class YDBMCPServer(FastMCP):
                         {"subject": perm.subject, "permission_names": list(perm.permission_names)}
                     )
 
-            # Add table information if this is a table
-            if str(path_response.type) == "TABLE" and hasattr(path_response, "table"):
-                table_info = {
-                    "columns": [],
-                    "primary_key": (
-                        list(path_response.table.primary_key)
-                        if path_response.table.primary_key
-                        else []
-                    ),
-                    "indexes": [],
-                }
-
-                # Add column information
-                for column in path_response.table.columns:
-                    table_info["columns"].append(
-                        {
-                            "name": column.name,
-                            "type": str(column.type),
+            # Add table specific information if it's a table
+            if str(path_response.type) == "TABLE" or path_response.type == 2:
+                try:
+                    # Get table client for more detailed table info
+                    table_client = self.driver.table_client
+                    session = await table_client.session().create()
+                    try:
+                        # Get detailed table description
+                        table_desc = await session.describe_table(path)
+                        result["table"] = {
+                            "columns": [],
+                            "primary_key": table_desc.primary_key,
+                            "indexes": [],
+                            "partitioning_settings": {},
+                            "storage_settings": {},
+                            "key_bloom_filter": table_desc.key_bloom_filter,
+                            "read_replicas_settings": table_desc.read_replicas_settings,
+                            "column_families": [],
                         }
-                    )
 
-                # Add index information if available
-                if path_response.table.indexes:
-                    for index in path_response.table.indexes:
-                        table_info["indexes"].append(
-                            {
-                                "name": index.name,
-                                "columns": list(index.columns),
+                        # Add columns with more details
+                        for column in table_desc.columns:
+                            col_info = {
+                                "name": column.name,
+                                "type": str(column.type),
+                                "family": column.family,
                             }
-                        )
+                            result["table"]["columns"].append(col_info)
 
-                result["table"] = table_info
+                        # Add indexes with more details
+                        for index in table_desc.indexes:
+                            index_info = {
+                                "name": index.name,
+                                "index_columns": list(index.index_columns),
+                                "cover_columns": (
+                                    list(index.cover_columns)
+                                    if hasattr(index, "cover_columns")
+                                    else []
+                                ),
+                                "index_type": (
+                                    str(index.index_type) if hasattr(index, "index_type") else None
+                                ),
+                            }
+                            result["table"]["indexes"].append(index_info)
 
-            # Convert all dict keys to strings for JSON serialization
-            safe_result = self._stringify_dict_keys(result)
-            return [
-                TextContent(
-                    type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder)
-                )
-            ]
+                        # Add column families if present
+                        if hasattr(table_desc, "column_families"):
+                            for family in table_desc.column_families:
+                                family_info = {
+                                    "name": family.name,
+                                    "data": family.data,
+                                    "compression": (
+                                        str(family.compression)
+                                        if hasattr(family, "compression")
+                                        else None
+                                    ),
+                                }
+                                result["table"]["column_families"].append(family_info)
+
+                        # Add storage settings if present
+                        if hasattr(table_desc, "storage_settings"):
+                            ss = table_desc.storage_settings
+                            if ss:
+                                result["table"]["storage_settings"] = {
+                                    "tablet_commit_log0": ss.tablet_commit_log0,
+                                    "tablet_commit_log1": ss.tablet_commit_log1,
+                                    "external": ss.external,
+                                    "store_external": ss.store_external,
+                                }
+
+                        # Add partitioning settings if present
+                        if hasattr(table_desc, "partitioning_settings"):
+                            ps = table_desc.partitioning_settings
+                            if ps:
+                                if hasattr(ps, "partition_at_keys"):
+                                    result["table"]["partitioning_settings"][
+                                        "partition_at_keys"
+                                    ] = ps.partition_at_keys
+                                if hasattr(ps, "partition_by_size"):
+                                    result["table"]["partitioning_settings"][
+                                        "partition_by_size"
+                                    ] = ps.partition_by_size
+                                if hasattr(ps, "min_partitions_count"):
+                                    result["table"]["partitioning_settings"][
+                                        "min_partitions_count"
+                                    ] = ps.min_partitions_count
+                                if hasattr(ps, "max_partitions_count"):
+                                    result["table"]["partitioning_settings"][
+                                        "max_partitions_count"
+                                    ] = ps.max_partitions_count
+
+                    finally:
+                        # Always release the session
+                        await session.close()
+
+                except Exception as table_error:
+                    logger.warning(f"Error getting detailed table info: {table_error}")
+                    # Fallback to basic table info from path_response
+                    if hasattr(path_response, "table") and path_response.table:
+                        result["table"] = {
+                            "columns": [],
+                            "primary_key": (
+                                path_response.table.primary_key
+                                if hasattr(path_response.table, "primary_key")
+                                else []
+                            ),
+                            "indexes": [],
+                            "partitioning_settings": {},
+                        }
+
+                        # Add basic columns
+                        if hasattr(path_response.table, "columns"):
+                            for column in path_response.table.columns:
+                                result["table"]["columns"].append(
+                                    {"name": column.name, "type": str(column.type)}
+                                )
+
+                        # Add basic indexes
+                        if hasattr(path_response.table, "indexes"):
+                            for index in path_response.table.indexes:
+                                result["table"]["indexes"].append(
+                                    {
+                                        "name": index.name,
+                                        "index_columns": (
+                                            list(index.index_columns)
+                                            if hasattr(index, "index_columns")
+                                            else []
+                                        ),
+                                    }
+                                )
+
+                        # Add basic partitioning settings
+                        if hasattr(path_response.table, "partitioning_settings"):
+                            ps = path_response.table.partitioning_settings
+                            if ps:
+                                if hasattr(ps, "partition_at_keys"):
+                                    result["table"]["partitioning_settings"][
+                                        "partition_at_keys"
+                                    ] = ps.partition_at_keys
+                                if hasattr(ps, "partition_by_size"):
+                                    result["table"]["partitioning_settings"][
+                                        "partition_by_size"
+                                    ] = ps.partition_by_size
+                                if hasattr(ps, "min_partitions_count"):
+                                    result["table"]["partitioning_settings"][
+                                        "min_partitions_count"
+                                    ] = ps.min_partitions_count
+                                if hasattr(ps, "max_partitions_count"):
+                                    result["table"]["partitioning_settings"][
+                                        "max_partitions_count"
+                                    ] = ps.max_partitions_count
+
+            # Convert to JSON string and return as TextContent
+            formatted_result = json.dumps(result, indent=2, cls=CustomJSONEncoder)
+            return [TextContent(type="text", text=formatted_result)]
 
         except Exception as e:
             logger.exception(f"Error describing path {path}: {e}")
-            safe_error = self._stringify_dict_keys(
-                {"error": f"Error describing path {path}: {str(e)}"}
-            )
+            safe_error = {"error": f"Error describing path {path}: {str(e)}"}
             return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
     async def restart(self):
@@ -894,19 +998,14 @@ class YDBMCPServer(FastMCP):
 
             # Handle any other result type
             if result is None:
-                return [
-                    {
-                        "type": "text",
-                        "text": "Operation completed successfully but returned no data",
-                    }
-                ]
+                return [TextContent(type="text", text="Operation completed successfully but returned no data")]
 
             return result
 
         except Exception as e:
             logger.exception(f"Error calling tool {tool_name}: {e}")
             error_msg = f"Error executing {tool_name}: {str(e)}"
-            return [{"type": "text", "text": error_msg}]
+            return [TextContent(type="text", text=error_msg)]
 
     def get_tool_schema(self) -> List[Dict[str, Any]]:
         """Get JSON schema for all registered tools.

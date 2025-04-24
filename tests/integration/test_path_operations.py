@@ -1,6 +1,6 @@
-"""Integration tests for YDB directory operations (list_directory and describe_path).
+"""Integration tests for YDB directory and table operations (list_directory, describe_path, table creation, and cleanup).
 
-These tests validate the functionality of the YDB directory management operations.
+These tests validate the functionality of YDB directory listing, path description, and table operations including creation and cleanup.
 They test real YDB interactions without mocks, requiring a running YDB instance.
 """
 
@@ -9,12 +9,11 @@ import json
 import logging
 import os
 import time
-from urllib.parse import urlparse
 
 import pytest
 
 # Import from conftest
-from tests.integration.conftest import YDB_DATABASE, call_mcp_tool
+from tests.integration.conftest import call_mcp_tool
 from ydb_mcp.connection import YDBConnection
 
 # Set up logging
@@ -109,3 +108,26 @@ async def test_list_directory_after_table_creation(mcp_server):
             mcp_server, "ydb_query", sql=f"DROP TABLE {test_table_name};"
         )
         logger.debug(f"Table cleanup result: {cleanup_result}")
+
+
+async def test_path_description(mcp_server):
+    """Test describing each item in the root directory."""
+    # List the root directory
+    result = await call_mcp_tool(mcp_server, "ydb_list_directory", path="/")
+    parsed = parse_text_content(result)
+    assert "items" in parsed, f"Root directory listing missing items: {parsed}"
+    # Describe each item
+    for item in parsed["items"]:
+        item_name = item["name"]
+        item_path = f"/{item_name}"
+        describe_result = await call_mcp_tool(mcp_server, "ydb_describe_path", path=item_path)
+        path_data = parse_text_content(describe_result)
+        assert "path" in path_data, f"Missing 'path' field in path data: {path_data}"
+        assert path_data["path"] == item_path, f"Expected path to be '{item_path}', got {path_data['path']}"
+        assert "type" in path_data, f"Missing 'type' field in path data: {path_data}"
+        assert "name" in path_data, f"Missing 'name' field in path data: {path_data}"
+        assert "owner" in path_data, f"Missing 'owner' field in path data: {path_data}"
+        if path_data["type"] == "TABLE":
+            assert "table" in path_data, f"Missing 'table' field for TABLE: {path_data}"
+            assert "columns" in path_data["table"], f"Missing 'columns' field in table data: {path_data}"
+            assert len(path_data["table"]["columns"]) > 0, f"Table should have at least one column: {path_data}"
