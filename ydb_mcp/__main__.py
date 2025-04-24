@@ -3,8 +3,9 @@
 import argparse
 import logging
 import os
+import sys
 
-from ydb_mcp.server import YDBMCPServer
+from ydb_mcp.server import YDBMCPServer, AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD
 
 
 def parse_args():
@@ -64,6 +65,17 @@ def main():
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
+    # Validate auth mode and required credentials
+    supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
+    auth_mode = args.ydb_auth_mode or AUTH_MODE_ANONYMOUS
+    if auth_mode not in supported_auth_modes:
+        print(f"Error: Unsupported auth mode: {auth_mode}. Supported modes: {', '.join(supported_auth_modes)}", file=sys.stderr)
+        exit(1)
+    if auth_mode == AUTH_MODE_LOGIN_PASSWORD:
+        if not args.ydb_login or not args.ydb_password:
+            print("Error: --ydb-login and --ydb-password are required for login-password authentication mode.", file=sys.stderr)
+            exit(1)
+
     # Set environment variables for YDB if provided via arguments
     if args.ydb_endpoint:
         os.environ["YDB_ENDPOINT"] = args.ydb_endpoint
@@ -82,7 +94,7 @@ def main():
         database=args.ydb_database,
         login=args.ydb_login,
         password=args.ydb_password,
-        auth_mode=args.ydb_auth_mode,
+        auth_mode=auth_mode,
     )
 
     print(f"Starting YDB MCP server with stdio transport")

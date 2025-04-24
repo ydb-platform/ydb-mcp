@@ -21,7 +21,28 @@ To get started with YDB MCP, you'll need to configure your MCP client to communi
       "command": "python3",
       "args": [
         "-m", "ydb_mcp",
-        "--ydb-endpoint", "grpc://localhost:2136", "--ydb-database", "/local"
+        "--ydb-endpoint", "grpc://localhost:2136/local"
+      ]
+    }
+  }
+}
+```
+
+### Example: Using login/password authentication
+
+To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-login`, and `--ydb-password` arguments:
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "python3",
+      "args": [
+        "-m", "ydb_mcp",
+        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-auth-mode", "login-password",
+        "--ydb-login", "<your-username>",
+        "--ydb-password", "<your-password>"
       ]
     }
   }

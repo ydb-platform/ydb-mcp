@@ -21,8 +21,9 @@ from ydb_mcp.patches import suppress_task_destroyed_warning
 from ydb_mcp.server import AUTH_MODE_ANONYMOUS, YDBMCPServer
 
 # Configuration for the tests
-YDB_ENDPOINT = os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136")
-YDB_DATABASE = os.environ.get("YDB_DATABASE", "/local")
+YDB_ENDPOINT = os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136/local")
+# Database will be extracted from the endpoint if not explicitly provided
+YDB_DATABASE = os.environ.get("YDB_DATABASE")
 
 # Set up logging
 logging.basicConfig(level=logging.WARNING)  # Set default level to WARNING
@@ -481,24 +482,25 @@ async def call_mcp_tool(mcp_server, tool_name, **params):
     result = await mcp_server.call_tool(tool_name, params)
 
     # If the result is a list of TextContent objects, convert them to a more usable format
-    if (
-        result
-        and isinstance(result, list)
-        and hasattr(result[0], "type")
-        and result[0].type == "text"
-    ):
-        # Convert from TextContent to dict for easier test assertions
-        if (
-            len(result) == 1
-            and hasattr(result[0], "text")
-            and result[0].text.strip().startswith("{")
-        ):
-            # If it's a single TextContent with JSON, try to parse it
-            try:
-                json_result = json.loads(result[0].text)
-                return json_result
-            except json.JSONDecodeError:
-                pass
+    if isinstance(result, list) and len(result) > 0 and hasattr(result[0], "text"):
+        try:
+            # Parse the JSON text from the TextContent
+            parsed_result = json.loads(result[0].text)
+
+            # For backward compatibility with tests, if there's an error key, return it directly
+            if "error" in parsed_result:
+                return parsed_result
+
+            # For query results, return the result_sets directly if present
+            if "result_sets" in parsed_result:
+                return parsed_result
+
+            # For other responses (list_directory, describe_path), return the parsed JSON
+            return parsed_result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            return {"error": str(e)}
 
     return result
 

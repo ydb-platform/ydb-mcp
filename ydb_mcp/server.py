@@ -59,10 +59,10 @@ class CustomJSONEncoder(json.JSONEncoder):
         # Handle bytes objects - try UTF-8 first, fall back to base64
         if isinstance(obj, bytes):
             try:
-                return obj.decode('utf-8')
+                return obj.decode("utf-8")
             except UnicodeDecodeError:
                 # If it's not valid UTF-8, base64 encode it
-                return base64.b64encode(obj).decode('ascii')
+                return base64.b64encode(obj).decode("ascii")
 
         # Use the parent class's default method for other types
         return super().default(obj)
@@ -138,7 +138,10 @@ class YDBMCPServer(FastMCP):
         self._original_methods = {}
 
         # Authentication settings
-        self.auth_mode = auth_mode or AUTH_MODE_ANONYMOUS
+        supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
+        self.auth_mode = (auth_mode or AUTH_MODE_ANONYMOUS)
+        if self.auth_mode not in supported_auth_modes:
+            raise ValueError(f"Unsupported auth mode: {self.auth_mode}. Supported modes: {', '.join(supported_auth_modes)}")
         self.login = login
         self.password = password
 
@@ -181,94 +184,68 @@ class YDBMCPServer(FastMCP):
         """Create a YDB driver with the current settings.
 
         Returns:
-            The YDB driver
+            ydb.aio.Driver or None: The created driver instance if successful, None if failed
         """
-        async with self._driver_lock:
-            if self.driver is None:
-                # If auth_mode is login_password and we have both login and password, use them
-                if self.auth_mode == AUTH_MODE_LOGIN_PASSWORD and self.login and self.password:
-                    logger.info(f"Using login/password authentication with user '{self.login}'")
-                    credentials_factory = self._login_password_credentials
-                else:
-                    # Default to anonymous auth
-                    logger.info("Using anonymous authentication")
-                    credentials_factory = self._anonymous_credentials
+        try:
+            # Get credentials
+            credentials_factory = self.get_credentials_factory()
+            if not credentials_factory:
+                return None
 
-                # Clear any previous auth errors
-                self.auth_error = None
+            # Ensure we use the current event loop
+            self._loop = asyncio.get_event_loop()
 
-                try:
-                    # Ensure we use the current event loop
-                    self._loop = asyncio.get_event_loop()
+            # Determine endpoint and database
+            endpoint = self.endpoint
+            database = self.database
 
-                    # Check if we have a connection string
-                    connection_string = self.ydb_connection_string
-                    if not connection_string and self.endpoint and self.database:
-                        connection_string = f"grpc://{self.endpoint}/{self.database}"
+            # If we have a connection string, parse it
+            if self.ydb_connection_string:
+                conn = YDBConnection(self.ydb_connection_string)
+                endpoint, database = conn._parse_endpoint_and_database()
 
-                    if not connection_string:
-                        self.auth_error = "YDB connection string not specified"
-                        logger.error(self.auth_error)
-                        return None
+            # Validate we have required parameters
+            if not endpoint:
+                self.auth_error = "YDB endpoint not specified"
+                logger.error(self.auth_error)
+                return None
 
-                    logger.info(f"Connecting to YDB at {connection_string}...")
+            if not database:
+                self.auth_error = "YDB database not specified"
+                logger.error(self.auth_error)
+                return None
 
-                    # Create the driver
-                    driver_config = ydb.DriverConfig(
-                        endpoint=self.endpoint,
-                        database=self.database,
-                        credentials=credentials_factory(),
-                        root_certificates=self.root_certificates,
-                    )
+            logger.info(f"Connecting to YDB at {endpoint}, database: {database}")
 
-                    # Create and initialize the driver
-                    self.driver = ydb.aio.Driver(driver_config)
+            # Create the driver config
+            driver_config = ydb.DriverConfig(
+                endpoint=endpoint,
+                database=database,
+                credentials=credentials_factory(),
+                root_certificates=self.root_certificates,
+            )
 
-                    # Initialize driver with latest API
-                    await self.driver.wait(timeout=5.0)
+            # Create and initialize the driver
+            self.driver = ydb.aio.Driver(driver_config)
 
-                    # Check if we connected successfully
-                    if hasattr(self.driver, "discovery") and self.driver.discovery is not None:
-                        if (
-                            hasattr(self.driver.discovery, "_discovery_status")
-                            and self.driver.discovery._discovery_status != "Ready"
-                        ):
-                            self.auth_error = f"Failed to connect to YDB server: {self.driver.discovery._discovery_status}"
-                            logger.error(self.auth_error)
-                            return None
+            # Initialize driver with latest API
+            await self.driver.wait(timeout=5.0)
+            # Check if we connected successfully
+            debug_details = await self._loop.run_in_executor(
+                None, lambda: self.driver.discovery_debug_details()
+            )
+            if not debug_details.startswith("Resolved endpoints"):
+                self.auth_error = f"Failed to connect to YDB server: {debug_details}"
+                logger.error(self.auth_error)
+                return None
 
-                    logger.info(f"Successfully connected to YDB at {connection_string}")
-                    return self.driver
+            logger.info(f"Successfully connected to YDB at {endpoint}")
+            return self.driver
 
-                except Exception as e:
-                    error_message = str(e)
-                    if (
-                        "unauthorized" in error_message.lower()
-                        or "permission denied" in error_message.lower()
-                    ):
-                        self.auth_error = f"Authentication failed: {error_message}"
-                    else:
-                        self.auth_error = f"Error connecting to YDB: {error_message}"
-                    logger.error(self.auth_error)
-
-                    # Ensure driver is properly stopped if initialization fails
-                    if self.driver is not None:
-                        try:
-                            # Properly close topic client if it exists
-                            if (
-                                hasattr(self.driver, "_topic_client")
-                                and self.driver._topic_client is not None
-                            ):
-                                await self._close_topic_client(self.driver._topic_client)
-                            # Stop driver
-                            await self.driver.stop()
-                        except Exception as cleanup_error:
-                            logger.warning(
-                                f"Error cleaning up driver after initialization failure: {cleanup_error}"
-                            )
-                        self.driver = None
-
-                    return None
+        except Exception as e:
+            self.auth_error = str(e)
+            logger.error(f"Error creating YDB driver: {e}")
+            return None
 
     async def _close_topic_client(self, topic_client):
         """Properly close a topic client."""
@@ -363,9 +340,16 @@ class YDBMCPServer(FastMCP):
 
             return self.pool
 
-    async def query(
-        self, sql: str, params: Optional[Dict[str, Any]] = None
-    ) -> Union[Dict[str, Any], List[TextContent]]:
+    def _stringify_dict_keys(self, obj):
+        """Recursively convert all dict keys to strings for JSON serialization."""
+        if isinstance(obj, dict):
+            return {str(k): self._stringify_dict_keys(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._stringify_dict_keys(i) for i in obj]
+        else:
+            return obj
+
+    async def query(self, sql: str, params: Optional[Dict[str, Any]] = None) -> List[TextContent]:
         """Run a SQL query against YDB.
 
         Args:
@@ -373,80 +357,36 @@ class YDBMCPServer(FastMCP):
             params: Optional query parameters
 
         Returns:
-            Dictionary with result sets or List of TextContent objects
+            List of TextContent objects with JSON-formatted results
         """
         # Check if there's an authentication error
         if self.auth_error:
-            return {"error": self.auth_error}
+            return [TextContent(type="text", text=json.dumps({"error": self.auth_error}, indent=2))]
 
         try:
             pool = await self.get_pool()
-
-            # Prepare parameters if provided
             ydb_params = None
             if params:
                 ydb_params = {}
                 for key, value in params.items():
-                    # Ensure key starts with $
                     param_key = key if key.startswith("$") else f"${key}"
-
-                    # Convert to YDB types if needed
-                    if isinstance(value, (list, tuple)) and len(value) == 2:
-                        # Handle tuple/list format (value, type)
-                        param_value = value[0]
-                        type_name = value[1]
-
-                        # Get the YDB type by name
-                        if isinstance(type_name, str) and hasattr(ydb.PrimitiveType, type_name):
-                            ydb_type = getattr(ydb.PrimitiveType, type_name)
-                            ydb_params[param_key] = (param_value, ydb_type)
-                        else:
-                            # If type is not a valid YDB type name, just pass the value
-                            ydb_params[param_key] = param_value
-                    else:
-                        # Just pass the value
-                        ydb_params[param_key] = value
-
-            # Execute query
+                    ydb_params[param_key] = value
             result_sets = await pool.execute_with_retries(sql, ydb_params)
-
-            # Process all result sets
             all_results = []
             for result_set in result_sets:
                 processed = self._process_result_set(result_set)
                 all_results.append(processed)
-
-            # Return a structured result dictionary
-            result = {"result_sets": all_results}
-
-            # Check if we're in a test environment (TextContent will not be serialized correctly)
-            if "pytest" in sys.modules:
-                return result
-
-            # Format the result as a TextContent object for normal operation
-            formatted_result = json.dumps(result, indent=2, cls=CustomJSONEncoder)
-            return [TextContent(type="text", text=formatted_result)]
-
-        except ValueError as e:
-            # Handle authentication errors raised by get_pool
-            error_message = str(e)
-            if error_message == self.auth_error:
-                error_message = self.auth_error
-
-            # Check if we're in a test environment
-            if "pytest" in sys.modules:
-                return {"error": error_message}
-
-            return [TextContent(type="text", text=f"Error: {error_message}")]
+            # Convert all dict keys to strings for JSON serialization
+            safe_result = self._stringify_dict_keys({"result_sets": all_results})
+            return [
+                TextContent(
+                    type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder)
+                )
+            ]
         except Exception as e:
-            logger.exception("Error executing YDB query")
             error_message = str(e)
-
-            # Check if we're in a test environment
-            if "pytest" in sys.modules:
-                return {"error": error_message}
-
-            return [TextContent(type="text", text=f"Error: {error_message}")]
+            safe_error = self._stringify_dict_keys({"error": error_message})
+            return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
     def _process_result_set(self, result_set):
         """Process YDB result set into a dictionary format.
@@ -486,9 +426,7 @@ class YDBMCPServer(FastMCP):
             logger.exception(f"Error processing result set: {e}")
             return {"error": str(e), "columns": [], "rows": []}
 
-    async def query_with_params(
-        self, sql: str, params: str
-    ) -> Union[Dict[str, Any], List[TextContent]]:
+    async def query_with_params(self, sql: str, params: str) -> List[TextContent]:
         """Run a parameterized SQL query with JSON parameters.
 
         Args:
@@ -501,41 +439,40 @@ class YDBMCPServer(FastMCP):
         # Handle authentication errors
         if self.auth_error:
             logger.error(f"Authentication error: {self.auth_error}")
-            if "test" in sys.modules:
-                return {"error": f"Authentication error: {self.auth_error}"}
-            return [
-                TextContent(type="text", text=f"Error: Authentication error: {self.auth_error}")
-            ]
-
-        # Parse JSON parameters
+            safe_error = self._stringify_dict_keys(
+                {"error": f"Authentication error: {self.auth_error}"}
+            )
+            return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
         parsed_params = {}
         try:
             if params and params.strip():
                 parsed_params = json.loads(params)
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing JSON parameters: {str(e)}")
-            if "test" in sys.modules:
-                return {"error": f"Error parsing JSON parameters: {str(e)}"}
-            return [
-                TextContent(type="text", text=f"Error: Error parsing JSON parameters: {str(e)}")
-            ]
-
-        # Ensure all parameter keys start with $
-        params_with_prefix = {}
+            safe_error = self._stringify_dict_keys(
+                {"error": f"Error parsing JSON parameters: {str(e)}"}
+            )
+            return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
+        # Convert [value, type] to YDB type if needed
+        ydb_params = {}
         for key, value in parsed_params.items():
-            # Only add $ if it's not already there
             param_key = key if key.startswith("$") else f"${key}"
-            params_with_prefix[param_key] = value
-
+            if isinstance(value, (list, tuple)) and len(value) == 2:
+                param_value, type_name = value
+                if isinstance(type_name, str) and hasattr(ydb.PrimitiveType, type_name):
+                    ydb_type = getattr(ydb.PrimitiveType, type_name)
+                    ydb_params[param_key] = (param_value, ydb_type)
+                else:
+                    ydb_params[param_key] = param_value
+            else:
+                ydb_params[param_key] = value
         try:
-            # Execute query with parameters
-            return await self.query(sql, params_with_prefix)
+            return await self.query(sql, ydb_params)
         except Exception as e:
             error_message = f"Error executing parameterized query: {str(e)}"
             logger.error(error_message)
-            if "test" in sys.modules:
-                return {"error": error_message}
-            return [TextContent(type="text", text=f"Error: {error_message}")]
+            safe_error = self._stringify_dict_keys({"error": error_message})
+            return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
     def register_tools(self):
         """Register YDB query tools.
@@ -574,11 +511,7 @@ class YDBMCPServer(FastMCP):
                 "name": "ydb_status",
                 "description": "Get the current status of the YDB connection",
                 "handler": self.get_connection_status,  # Use real handler
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                },
+                "parameters": {"type": "object", "properties": {}, "required": []},
             },
             {
                 "name": "ydb_list_directory",
@@ -653,7 +586,8 @@ class YDBMCPServer(FastMCP):
         }
 
         # Format the result as a TextContent object
-        formatted_result = json.dumps(status_info, indent=2, cls=CustomJSONEncoder)
+        safe_status = self._stringify_dict_keys(status_info)
+        formatted_result = json.dumps(safe_status, indent=2, cls=CustomJSONEncoder)
         logger.info(f"Connection status: {formatted_result}")
         return [TextContent(type="text", text=formatted_result)]
 
@@ -664,11 +598,11 @@ class YDBMCPServer(FastMCP):
             path: Path to the directory to list
 
         Returns:
-            List of TextContent objects with directory contents
+            List of TextContent objects with JSON-formatted directory contents
         """
         # Check for authentication errors
         if self.auth_error:
-            return [TextContent(type="text", text=f"Error: {self.auth_error}")]
+            return [TextContent(type="text", text=json.dumps({"error": self.auth_error}, indent=2))]
 
         try:
             # Create driver if needed
@@ -676,7 +610,11 @@ class YDBMCPServer(FastMCP):
                 await self.create_driver()
 
             if self.driver is None:
-                return [TextContent(type="text", text="Error: Failed to create driver")]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": "Failed to create driver"}, indent=2)
+                    )
+                ]
 
             # Access the scheme client
             scheme_client = self.driver.scheme_client
@@ -686,42 +624,46 @@ class YDBMCPServer(FastMCP):
             dir_response = await scheme_client.list_directory(path)
 
             # Process the response
-            if not dir_response.children:
-                return [TextContent(type="text", text=f"Directory '{path}' is empty")]
-
-            # Format the result
             result = {"path": path, "items": []}
 
-            for entry in dir_response.children:
-                item = {
-                    "name": entry.name,
-                    "type": self.ENTRY_TYPE_MAP.get(entry.type, str(entry.type)),
-                    "owner": entry.owner,
-                }
+            if dir_response.children:
+                for entry in dir_response.children:
+                    item = {
+                        "name": entry.name,
+                        "type": self.ENTRY_TYPE_MAP.get(entry.type, str(entry.type)),
+                        "owner": entry.owner,
+                    }
 
-                # Add permissions if available
-                if hasattr(entry, "permissions") and entry.permissions:
-                    item["permissions"] = []
-                    for perm in entry.permissions:
-                        item["permissions"].append(
-                            {
-                                "subject": perm.subject,
-                                "permission_names": list(perm.permission_names),
-                            }
-                        )
+                    # Add permissions if available
+                    if hasattr(entry, "permissions") and entry.permissions:
+                        item["permissions"] = []
+                        for perm in entry.permissions:
+                            item["permissions"].append(
+                                {
+                                    "subject": perm.subject,
+                                    "permission_names": list(perm.permission_names),
+                                }
+                            )
 
-                result["items"].append(item)
+                    result["items"].append(item)
 
-            # Sort items by name for consistency
-            result["items"].sort(key=lambda x: x["name"])
+                # Sort items by name for consistency
+                result["items"].sort(key=lambda x: x["name"])
 
-            # Convert to JSON string and return as TextContent
-            formatted_result = json.dumps(result, indent=2, cls=CustomJSONEncoder)
-            return [TextContent(type="text", text=formatted_result)]
+            # Convert all dict keys to strings for JSON serialization
+            safe_result = self._stringify_dict_keys(result)
+            return [
+                TextContent(
+                    type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder)
+                )
+            ]
 
         except Exception as e:
             logger.exception(f"Error listing directory {path}: {e}")
-            return [TextContent(type="text", text=f"Error listing directory {path}: {str(e)}")]
+            safe_error = self._stringify_dict_keys(
+                {"error": f"Error listing directory {path}: {str(e)}"}
+            )
+            return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
     async def describe_path(self, path: str) -> List[TextContent]:
         """Describe a path in YDB.
@@ -730,11 +672,11 @@ class YDBMCPServer(FastMCP):
             path: Path to describe
 
         Returns:
-            List of TextContent objects with path description
+            List of TextContent objects with JSON-formatted path description
         """
         # Check for authentication errors
         if self.auth_error:
-            return [TextContent(type="text", text=f"Error: {self.auth_error}")]
+            return [TextContent(type="text", text=json.dumps({"error": self.auth_error}, indent=2))]
 
         try:
             # Create driver if needed
@@ -742,7 +684,11 @@ class YDBMCPServer(FastMCP):
                 await self.create_driver()
 
             if self.driver is None:
-                return [TextContent(type="text", text="Error: Failed to create driver")]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"error": "Failed to create driver"}, indent=2)
+                    )
+                ]
 
             # Access the scheme client
             scheme_client = self.driver.scheme_client
@@ -751,9 +697,13 @@ class YDBMCPServer(FastMCP):
             logger.info(f"Describing path: {path}")
             path_response = await scheme_client.describe_path(path)
 
-            # Process the response
             if path_response is None:
-                return [TextContent(type="text", text=f"Path '{path}' not found")]
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"error": f"Path '{path}' not found"}, indent=2),
+                    )
+                ]
 
             # Format the result
             result = {
@@ -771,165 +721,53 @@ class YDBMCPServer(FastMCP):
                         {"subject": perm.subject, "permission_names": list(perm.permission_names)}
                     )
 
-            # Add table specific information if it's a table
-            if str(path_response.type) == "TABLE" or path_response.type == 2:
-                try:
-                    # Get table client for more detailed table info
-                    table_client = self.driver.table_client
-                    session = await table_client.session().create()
-                    try:
-                        # Get detailed table description
-                        table_desc = await session.describe_table(path)
-                        result["table"] = {
-                            "columns": [],
-                            "primary_key": table_desc.primary_key,
-                            "indexes": [],
-                            "partitioning_settings": {},
-                            "storage_settings": {},
-                            "key_bloom_filter": table_desc.key_bloom_filter,
-                            "read_replicas_settings": table_desc.read_replicas_settings,
-                            "column_families": [],
+            # Add table information if this is a table
+            if str(path_response.type) == "TABLE" and hasattr(path_response, "table"):
+                table_info = {
+                    "columns": [],
+                    "primary_key": (
+                        list(path_response.table.primary_key)
+                        if path_response.table.primary_key
+                        else []
+                    ),
+                    "indexes": [],
+                }
+
+                # Add column information
+                for column in path_response.table.columns:
+                    table_info["columns"].append(
+                        {
+                            "name": column.name,
+                            "type": str(column.type),
                         }
+                    )
 
-                        # Add columns with more details
-                        for column in table_desc.columns:
-                            col_info = {
-                                "name": column.name,
-                                "type": str(column.type),
-                                "family": column.family,
-                            }
-                            result["table"]["columns"].append(col_info)
-
-                        # Add indexes with more details
-                        for index in table_desc.indexes:
-                            index_info = {
+                # Add index information if available
+                if path_response.table.indexes:
+                    for index in path_response.table.indexes:
+                        table_info["indexes"].append(
+                            {
                                 "name": index.name,
-                                "index_columns": list(index.index_columns),
-                                "cover_columns": (
-                                    list(index.cover_columns)
-                                    if hasattr(index, "cover_columns")
-                                    else []
-                                ),
-                                "index_type": (
-                                    str(index.index_type) if hasattr(index, "index_type") else None
-                                ),
+                                "columns": list(index.columns),
                             }
-                            result["table"]["indexes"].append(index_info)
+                        )
 
-                        # Add column families if present
-                        if hasattr(table_desc, "column_families"):
-                            for family in table_desc.column_families:
-                                family_info = {
-                                    "name": family.name,
-                                    "data": family.data,
-                                    "compression": (
-                                        str(family.compression)
-                                        if hasattr(family, "compression")
-                                        else None
-                                    ),
-                                }
-                                result["table"]["column_families"].append(family_info)
+                result["table"] = table_info
 
-                        # Add storage settings if present
-                        if hasattr(table_desc, "storage_settings"):
-                            ss = table_desc.storage_settings
-                            if ss:
-                                result["table"]["storage_settings"] = {
-                                    "tablet_commit_log0": ss.tablet_commit_log0,
-                                    "tablet_commit_log1": ss.tablet_commit_log1,
-                                    "external": ss.external,
-                                    "store_external": ss.store_external,
-                                }
-
-                        # Add partitioning settings if present
-                        if hasattr(table_desc, "partitioning_settings"):
-                            ps = table_desc.partitioning_settings
-                            if ps:
-                                if hasattr(ps, "partition_at_keys"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_at_keys"
-                                    ] = ps.partition_at_keys
-                                if hasattr(ps, "partition_by_size"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_by_size"
-                                    ] = ps.partition_by_size
-                                if hasattr(ps, "min_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "min_partitions_count"
-                                    ] = ps.min_partitions_count
-                                if hasattr(ps, "max_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "max_partitions_count"
-                                    ] = ps.max_partitions_count
-
-                    finally:
-                        # Always release the session
-                        await session.close()
-
-                except Exception as table_error:
-                    logger.warning(f"Error getting detailed table info: {table_error}")
-                    # Fallback to basic table info from path_response
-                    if hasattr(path_response, "table") and path_response.table:
-                        result["table"] = {
-                            "columns": [],
-                            "primary_key": (
-                                path_response.table.primary_key
-                                if hasattr(path_response.table, "primary_key")
-                                else []
-                            ),
-                            "indexes": [],
-                            "partitioning_settings": {},
-                        }
-
-                        # Add basic columns
-                        if hasattr(path_response.table, "columns"):
-                            for column in path_response.table.columns:
-                                result["table"]["columns"].append(
-                                    {"name": column.name, "type": str(column.type)}
-                                )
-
-                        # Add basic indexes
-                        if hasattr(path_response.table, "indexes"):
-                            for index in path_response.table.indexes:
-                                result["table"]["indexes"].append(
-                                    {
-                                        "name": index.name,
-                                        "index_columns": (
-                                            list(index.index_columns)
-                                            if hasattr(index, "index_columns")
-                                            else []
-                                        ),
-                                    }
-                                )
-
-                        # Add basic partitioning settings
-                        if hasattr(path_response.table, "partitioning_settings"):
-                            ps = path_response.table.partitioning_settings
-                            if ps:
-                                if hasattr(ps, "partition_at_keys"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_at_keys"
-                                    ] = ps.partition_at_keys
-                                if hasattr(ps, "partition_by_size"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_by_size"
-                                    ] = ps.partition_by_size
-                                if hasattr(ps, "min_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "min_partitions_count"
-                                    ] = ps.min_partitions_count
-                                if hasattr(ps, "max_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "max_partitions_count"
-                                    ] = ps.max_partitions_count
-
-            # Convert to JSON string and return as TextContent
-            formatted_result = json.dumps(result, indent=2, cls=CustomJSONEncoder)
-            return [TextContent(type="text", text=formatted_result)]
+            # Convert all dict keys to strings for JSON serialization
+            safe_result = self._stringify_dict_keys(result)
+            return [
+                TextContent(
+                    type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder)
+                )
+            ]
 
         except Exception as e:
             logger.exception(f"Error describing path {path}: {e}")
-            return [TextContent(type="text", text=f"Error describing path {path}: {str(e)}")]
+            safe_error = self._stringify_dict_keys(
+                {"error": f"Error describing path {path}: {str(e)}"}
+            )
+            return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
     async def restart(self):
         """Restart the YDB connection by closing and recreating the driver."""
@@ -1087,3 +925,29 @@ class YDBMCPServer(FastMCP):
 
         # Use FastMCP's built-in run method with stdio transport
         super().run(transport="stdio")
+
+    def get_credentials_factory(self) -> Optional[Callable[[], ydb.Credentials]]:
+        """Get YDB credentials factory based on authentication mode.
+
+        Returns:
+            Callable that creates YDB credentials, or None if authentication fails
+        """
+        # Clear any previous auth errors
+        self.auth_error = None
+
+        supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
+        if self.auth_mode not in supported_auth_modes:
+            self.auth_error = f"Unsupported auth mode: {self.auth_mode}. Supported modes: {', '.join(supported_auth_modes)}"
+            return None
+
+        # If auth_mode is login_password and we have both login and password, use them
+        if self.auth_mode == AUTH_MODE_LOGIN_PASSWORD:
+            if not self.login or not self.password:
+                self.auth_error = "Login and password must be provided for login-password authentication mode."
+                return None
+            logger.info(f"Using login/password authentication with user '{self.login}'")
+            return self._login_password_credentials
+        else:
+            # Default to anonymous auth
+            logger.info("Using anonymous authentication")
+            return self._anonymous_credentials

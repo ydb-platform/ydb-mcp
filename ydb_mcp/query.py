@@ -1,9 +1,9 @@
 import asyncio
+import datetime
+import decimal
 import logging
 import sys
 from typing import Any, Dict, List
-import datetime
-import decimal
 
 import ydb
 
@@ -125,7 +125,9 @@ class QueryExecutor:
         if isinstance(value, list):
             return [self._convert_ydb_value(item) for item in value]
         if isinstance(value, dict):
-            return {self._convert_ydb_value(k): self._convert_ydb_value(v) for k, v in value.items()}
+            return {
+                self._convert_ydb_value(k): self._convert_ydb_value(v) for k, v in value.items()
+            }
         if isinstance(value, tuple):
             return tuple(self._convert_ydb_value(item) for item in value)
 

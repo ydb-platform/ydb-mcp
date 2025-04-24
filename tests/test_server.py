@@ -79,13 +79,19 @@ class TestYDBMCPServer:
             mock_pool.execute_with_retries.assert_called_once_with("SELECT * FROM table", None)
 
             # Check the result was processed correctly
-            assert "result_sets" in result
-            assert len(result["result_sets"]) == 1
-            assert "columns" in result["result_sets"][0]
-            assert "rows" in result["result_sets"][0]
-            assert result["result_sets"][0]["columns"] == ["column1", "column2"]
-            assert len(result["result_sets"][0]["rows"]) == 1
-            assert result["result_sets"][0]["rows"][0] == ["value1", 123]
+            assert isinstance(result, list)
+            assert len(result) == 1
+            assert isinstance(result[0], TextContent)
+
+            # Parse the JSON response
+            parsed_result = json.loads(result[0].text)
+            assert "result_sets" in parsed_result
+            assert len(parsed_result["result_sets"]) == 1
+            assert "columns" in parsed_result["result_sets"][0]
+            assert "rows" in parsed_result["result_sets"][0]
+            assert parsed_result["result_sets"][0]["columns"] == ["column1", "column2"]
+            assert len(parsed_result["result_sets"][0]["rows"]) == 1
+            assert parsed_result["result_sets"][0]["rows"][0] == ["value1", 123]
 
     async def test_query_with_params(self):
         """Test query with parameters."""
@@ -141,8 +147,14 @@ class TestYDBMCPServer:
             result = await server.query("SELECT * FROM table")
 
             # Verify error is returned
-            assert "error" in result
-            assert result["error"] == "Authentication failed: Invalid token"
+            assert isinstance(result, list)
+            assert len(result) == 1
+            assert isinstance(result[0], TextContent)
+
+            # Parse the JSON response
+            parsed_result = json.loads(result[0].text)
+            assert "error" in parsed_result
+            assert parsed_result["error"] == "Authentication failed: Invalid token"
 
     async def test_query_with_complex_params(self):
         """Test query with complex parameter types."""
@@ -542,7 +554,7 @@ class TestYDBMCPServer:
         assert decoded["time"] == "12:00:00"
         assert decoded["timedelta"] == "3600.0s"
         assert decoded["decimal"] == "123.45"
-        assert decoded["bytes"] == 'test bytes'
+        assert decoded["bytes"] == "test bytes"
         assert decoded["regular"] == "string"
         assert decoded["number"] == 42
 

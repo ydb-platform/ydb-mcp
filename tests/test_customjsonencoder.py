@@ -140,5 +140,5 @@ def test_mixed_data_serialization():
     assert deserialized["bool"] is True
     assert deserialized["none"] is None
     assert deserialized["datetime"] == "2023-07-15T12:30:45"
-    assert deserialized["bytes"] == 'Hello, World!'
+    assert deserialized["bytes"] == "Hello, World!"
     assert deserialized["decimal"] == "123.456789"

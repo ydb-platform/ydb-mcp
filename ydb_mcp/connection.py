@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 from typing import Optional, Tuple
+from urllib.parse import urlparse
 
 import ydb
 
@@ -11,49 +12,106 @@ logger = logging.getLogger(__name__)
 class YDBConnection:
     """Manages YDB connection with async support."""
 
-    def __init__(self, connection_string: str):
+    def __init__(self, connection_string: str, database: str = None):
         """Initialize YDB connection.
 
         Args:
             connection_string: YDB connection string
+            database: Optional database path. If not provided, will be extracted from connection_string if present
         """
         self.connection_string = connection_string
         self.driver: Optional[ydb.Driver] = None
         self.session_pool: Optional[ydb.SessionPool] = None
+        self._database = database
+        self.last_error = None
+
+    def _parse_endpoint_and_database(self) -> Tuple[str, str]:
+        """Parse endpoint and database from connection string.
+
+        Returns:
+            Tuple of (endpoint, database)
+
+        Raises:
+            RuntimeError: If no database is specified either in connection string or explicitly
+        """
+        # Parse the URL
+        connection_string = self.connection_string
+        if not connection_string.startswith(("grpc://", "grpcs://")):
+            # If no scheme, assume grpc:// and parse as host:port
+            if "/" in connection_string:
+                host_port, path = connection_string.split("/", 1)
+                connection_string = f"grpc://{host_port}/{path}"
+            else:
+                connection_string = f"grpc://{connection_string}"
+
+        parsed = urlparse(connection_string)
+
+        # Extract endpoint (scheme + netloc)
+        endpoint = f"{parsed.scheme}://{parsed.netloc}"
+
+        # Extract database path
+        database = self._database
+        if not database:
+            if parsed.path:
+                database = parsed.path
+                # Remove query parameters if present
+                if "?" in database:
+                    database = database.split("?")[0]
+
+        # Ensure database starts with /
+        if database and not database.startswith("/"):
+            database = f"/{database}"
+
+        # Raise error if no database specified
+        if not database:
+            raise RuntimeError("Database not specified in connection string or explicitly")
+
+        return endpoint, database
 
     async def connect(self) -> Tuple[ydb.Driver, ydb.SessionPool]:
         """Connect to YDB and setup session pool asynchronously.
 
         Returns:
             Tuple of (driver, session_pool)
+
+        Raises:
+            RuntimeError: If connection fails
         """
-        logger.info(f"Connecting to YDB with connection string: {self.connection_string}")
+        try:
+            endpoint, database = self._parse_endpoint_and_database()
+            logger.info(f"Connecting to YDB endpoint: {endpoint}, database: {database}")
 
-        # Run driver initialization in a separate thread
-        loop = asyncio.get_event_loop()
-
-        # Create driver in thread to not block
-        self.driver = await loop.run_in_executor(
-            None,
-            lambda: ydb.Driver(
-                endpoint=self.connection_string, database=self._extract_database_path()
-            ),
-        )
-
-        # Wait for driver to be ready
-        ready = await loop.run_in_executor(None, self.driver.wait, 10)
-
-        if not ready:
-            raise RuntimeError(
-                f"YDB driver failed to connect: {self.driver.discovery_debug_details()}"
+            # Create driver with direct parameters instead of config
+            self.driver = ydb.aio.Driver(
+                endpoint=endpoint,
+                database=database,
+                credentials=ydb.credentials.AnonymousCredentials(),
             )
 
-        logger.info("Connected to YDB successfully")
+            # Wait for driver to be ready with timeout
+            try:
+                await asyncio.wait_for(self.driver.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                self.last_error = "Connection timeout"
+                raise RuntimeError(f"YDB driver connection timeout after 10 seconds")
 
-        # Create session pool
-        self.session_pool = ydb.SessionPool(self.driver)
+            # Check if we connected successfully
+            if not self.driver.discovery_debug_details().startswith("Resolved endpoints"):
+                debug_details = self.driver.discovery_debug_details()
+                self.last_error = f"Driver not ready: {debug_details}"
+                raise RuntimeError(f"YDB driver failed to connect: {debug_details}")
 
-        return self.driver, self.session_pool
+            logger.info("Connected to YDB successfully")
+
+            # Create session pool
+            self.session_pool = ydb.SessionPool(self.driver)
+
+            return self.driver, self.session_pool
+
+        except Exception as e:
+            self.last_error = str(e)
+            logger.error(f"Failed to connect to YDB: {e}")
+            raise RuntimeError(f"Failed to connect to YDB: {e}")
 
     async def close(self) -> None:
         """Close YDB connection."""

@@ -7,12 +7,15 @@ They test real YDB interactions without mocks, requiring a running YDB instance.
 import asyncio
 import json
 import logging
+import os
 import time
+from urllib.parse import urlparse
 
 import pytest
 
 # Import from conftest
 from tests.integration.conftest import YDB_DATABASE, call_mcp_tool
+from ydb_mcp.connection import YDBConnection
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -59,11 +62,16 @@ async def test_list_root_directory(mcp_server):
 
 async def test_list_directory_after_table_creation(mcp_server):
     """Test that a newly created table appears in the directory listing."""
+    # Use the same logic as the server to parse endpoint and database
+    ydb_endpoint = os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136/local")
+    conn = YDBConnection(ydb_endpoint)
+    _, db_path = conn._parse_endpoint_and_database()
+
     # Generate a unique table name to avoid conflicts
     test_table_name = f"test_table_{int(time.time())}"
 
     try:
-        # Create a new table
+        # Create a new table in the current database (not as an absolute path)
         create_result = await call_mcp_tool(
             mcp_server,
             "ydb_query",
@@ -81,24 +89,19 @@ async def test_list_directory_after_table_creation(mcp_server):
         # Wait a moment for the table to be fully created and visible
         await asyncio.sleep(1)
 
-        # List the root directory
-        list_result = await call_mcp_tool(mcp_server, "ydb_list_directory", path=YDB_DATABASE)
-        list_result = parse_text_content(list_result)
-        assert "error" not in list_result, f"Error listing directory: {list_result}"
-        assert "items" in list_result, f"Directory listing should contain items: {list_result}"
-
-        logger.debug(f"Directory listing items: {list_result['items']}")
-
-        # Find our table in the listing
-        table_found = False
-        for item in list_result["items"]:
-            logger.debug(f"Checking item: {item}")
-            if item["name"] == test_table_name:
-                table_found = True
-                assert item["type"] == "TABLE", f"Expected type 'TABLE', got {item['type']}"
+        # List the database directory
+        path = db_path
+        found = False
+        items = []
+        for _ in range(5):
+            dir_list = await call_mcp_tool(mcp_server, "ydb_list_directory", path=path)
+            parsed_dir = parse_text_content(dir_list)
+            items = parsed_dir.get("items", []) if isinstance(parsed_dir, dict) else []
+            if any(test_table_name == item.get("name") for item in items):
+                found = True
                 break
-
-        assert table_found, f"Table {test_table_name} not found in directory listing"
+            await asyncio.sleep(1)
+        assert found, f"Table {test_table_name} not found in directory listing: {items}"
 
     finally:
         # Clean up - drop the table

@@ -176,11 +176,11 @@ class TestQueryExecutor(unittest.TestCase):
     def test_convert_ydb_value_bytes(self):
         """Test _convert_ydb_value with bytes."""
         # Test UTF-8 bytes
-        utf8_bytes = "Hello, World!".encode('utf-8')
+        utf8_bytes = "Hello, World!".encode("utf-8")
         self.assertEqual(self.executor._convert_ydb_value(utf8_bytes), utf8_bytes)
 
         # Test UTF-8 bytes with non-ASCII characters
-        utf8_complex = "UTF8 строка".encode('utf-8')
+        utf8_complex = "UTF8 строка".encode("utf-8")
         self.assertEqual(self.executor._convert_ydb_value(utf8_complex), utf8_complex)
 
         # Test non-UTF8 bytes
@@ -218,20 +218,17 @@ class TestQueryExecutor(unittest.TestCase):
     def test_convert_ydb_value_containers(self):
         """Test _convert_ydb_value with container types."""
         # Test list with mixed types
-        test_list = [1, "test".encode('utf-8'), True]
+        test_list = [1, "test".encode("utf-8"), True]
         converted_list = self.executor._convert_ydb_value(test_list)
         self.assertEqual(converted_list, [1, b"test", True])
 
         # Test dict with mixed types
-        test_dict = {
-            "key1".encode('utf-8'): "value1".encode('utf-8'),
-            "key2".encode('utf-8'): 42
-        }
+        test_dict = {"key1".encode("utf-8"): "value1".encode("utf-8"), "key2".encode("utf-8"): 42}
         converted_dict = self.executor._convert_ydb_value(test_dict)
         self.assertEqual(converted_dict, {b"key1": b"value1", b"key2": 42})
 
         # Test tuple with mixed types
-        test_tuple = (1, "test".encode('utf-8'), True)
+        test_tuple = (1, "test".encode("utf-8"), True)
         converted_tuple = self.executor._convert_ydb_value(test_tuple)
         self.assertEqual(converted_tuple, (1, b"test", True))
 
@@ -239,37 +236,22 @@ class TestQueryExecutor(unittest.TestCase):
         """Test _convert_ydb_value with nested data structures."""
         # Create a complex nested structure
         nested_data = {
-            "string".encode('utf-8'): "value".encode('utf-8'),
-            "list".encode('utf-8'): [
+            "string".encode("utf-8"): "value".encode("utf-8"),
+            "list".encode("utf-8"): [
                 1,
-                "item".encode('utf-8'),
-                {
-                    "nested_key".encode('utf-8'): "nested_value".encode('utf-8')
-                }
+                "item".encode("utf-8"),
+                {"nested_key".encode("utf-8"): "nested_value".encode("utf-8")},
             ],
-            "dict".encode('utf-8'): {
-                "key1".encode('utf-8'): [1, 2, "three".encode('utf-8')],
-                "key2".encode('utf-8'): {
-                    "inner".encode('utf-8'): "value".encode('utf-8')
-                }
-            }
+            "dict".encode("utf-8"): {
+                "key1".encode("utf-8"): [1, 2, "three".encode("utf-8")],
+                "key2".encode("utf-8"): {"inner".encode("utf-8"): "value".encode("utf-8")},
+            },
         }
 
         expected_result = {
             b"string": b"value",
-            b"list": [
-                1,
-                b"item",
-                {
-                    b"nested_key": b"nested_value"
-                }
-            ],
-            b"dict": {
-                b"key1": [1, 2, b"three"],
-                b"key2": {
-                    b"inner": b"value"
-                }
-            }
+            b"list": [1, b"item", {b"nested_key": b"nested_value"}],
+            b"dict": {b"key1": [1, 2, b"three"], b"key2": {b"inner": b"value"}},
         }
 
         converted = self.executor._convert_ydb_value(nested_data)
