@@ -853,3 +853,34 @@ async def test_describe_nonexistent_path_integration(mcp_server):
 
     # Should contain an error message
     assert "Error" in item["text"], f"Expected error message, got: {item['text']}"
+
+
+async def test_ydb_status_integration(mcp_server):
+    """Test getting YDB connection status."""
+    result = await call_mcp_tool(mcp_server, "ydb_status")
+
+    # Parse the JSON result
+    assert isinstance(result, list), f"Expected list result, got {type(result)}"
+    assert len(result) > 0, "Expected non-empty result list"
+
+    item = result[0]
+    assert isinstance(item, dict), f"Expected dict item, got {type(item)}"
+    assert "type" in item, f"Missing 'type' field in item: {item}"
+    assert "text" in item, f"Missing 'text' field in item: {item}"
+
+    # Parse the JSON string within the text field
+    status_data = json.loads(item["text"])
+
+    # Verify the structure
+    assert "status" in status_data, f"Missing 'status' field in status_data: {status_data}"
+    assert "ydb_endpoint" in status_data, f"Missing 'ydb_endpoint' field in status_data: {status_data}"
+    assert "ydb_database" in status_data, f"Missing 'ydb_database' field in status_data: {status_data}"
+    assert "auth_mode" in status_data, f"Missing 'auth_mode' field in status_data: {status_data}"
+    assert "ydb_connection" in status_data, f"Missing 'ydb_connection' field in status_data: {status_data}"
+
+    # For a successful test run, we expect to be connected
+    assert status_data["status"] == "running", f"Expected status to be 'running', got {status_data['status']}"
+    assert status_data["ydb_connection"] == "connected", f"Expected ydb_connection to be 'connected', got {status_data['ydb_connection']}"
+    assert status_data["error"] is None, f"Expected no error, got: {status_data.get('error')}"
+
+    logger.info(f"YDB status check successful: {status_data}")

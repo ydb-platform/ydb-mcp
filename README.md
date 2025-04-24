@@ -28,6 +28,29 @@ To get started with YDB MCP, you'll need to configure your MCP client to communi
 }
 ```
 
+## Available tools
+
+YDB MCP provides the following tools for interacting with YDB databases:
+
+- `ydb_query`: Run a SQL query against a YDB database
+  - Parameters:
+    - `sql`: SQL query string to execute
+
+- `ydb_query_with_params`: Run a parameterized SQL query with JSON parameters
+  - Parameters:
+    - `sql`: SQL query string with parameter placeholders
+    - `params`: JSON string containing parameter values
+
+- `ydb_list_directory`: List directory contents in YDB
+  - Parameters:
+    - `path`: YDB directory path to list
+
+- `ydb_describe_path`: Get detailed information about a YDB path (table, directory, etc.)
+  - Parameters:
+    - `path`: YDB path to describe
+
+- `ydb_status`: Get the current status of the YDB connection
+
 ## Development
 
 The project uses [Make](https://www.gnu.org/software/make/) as its primary development tool, providing a consistent interface for common development tasks.

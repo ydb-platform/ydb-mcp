@@ -575,9 +575,9 @@ class YDBMCPServer(FastMCP):
                 "description": "Get the current status of the YDB connection",
                 "handler": self.get_connection_status,  # Use real handler
                 "parameters": {
-                    "properties": {"params": {"type": "string", "title": "params"}},
-                    "required": ["params"],
                     "type": "object",
+                    "properties": {},
+                    "required": []
                 },
             },
             {
@@ -614,7 +614,7 @@ class YDBMCPServer(FastMCP):
                 parameters=spec.get("parameters"),
             )
 
-    async def get_connection_status(self, params) -> List[TextContent]:
+    async def get_connection_status(self) -> List[TextContent]:
         """Get the current status of the YDB connection.
 
         Returns:
@@ -1039,8 +1039,8 @@ class YDBMCPServer(FastMCP):
                 result = await self.query(sql=params["sql"])
             elif tool_name == "ydb_query_with_params" and "sql" in params and "params" in params:
                 result = await self.query_with_params(sql=params["sql"], params=params["params"])
-            elif tool_name == "ydb_status" and "params" in params:
-                result = await self.get_connection_status(params=params["params"])
+            elif tool_name == "ydb_status":
+                result = await self.get_connection_status()
             elif tool_name == "ydb_list_directory" and "path" in params:
                 result = await self.list_directory(path=params["path"])
             elif tool_name == "ydb_describe_path" and "path" in params:
