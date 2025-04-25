@@ -4,20 +4,17 @@ import asyncio
 import base64
 import datetime
 import decimal
-import gc
 import json
 import logging
 import os
-import sys
-import types
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
 import ydb
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
-from ydb.aio import Driver as AsyncDriver
 from ydb.aio import QuerySessionPool
 
+from ydb_mcp.connection import YDBConnection
 from ydb_mcp.tool_manager import ToolManager
 
 logger = logging.getLogger(__name__)
@@ -94,15 +91,15 @@ class YDBMCPServer(FastMCP):
 
     def __init__(
         self,
-        endpoint: str = None,
-        database: str = None,
-        credentials_factory: Optional[Callable[[], ydb.Credentials]] = None,
+        endpoint: str | None = None,
+        database: str | None = None,
+        credentials_factory: Callable[[], ydb.Credentials] | None = None,
         ydb_connection_string: str = "",
-        tool_manager: Optional[ToolManager] = None,
-        auth_mode: str = None,
-        login: str = None,
-        password: str = None,
-        root_certificates: str = None,
+        tool_manager: ToolManager | None = None,
+        auth_mode: str | None = None,
+        login: str | None = None,
+        password: str | None = None,
+        root_certificates: str | None = None,
         *args,
         **kwargs,
     ):
@@ -127,14 +124,14 @@ class YDBMCPServer(FastMCP):
         self.database = database or os.environ.get("YDB_DATABASE", "/local")
         self.credentials_factory = credentials_factory
         self.ydb_connection_string = ydb_connection_string
-        self.auth_error = None
+        self.auth_error: str | None = None
         self._loop = None
         self.pool = None
         self.tool_manager = tool_manager or ToolManager()
         self._driver_lock = asyncio.Lock()
         self._pool_lock = asyncio.Lock()
         self.root_certificates = root_certificates
-        self._original_methods = {}
+        self._original_methods: Dict = {}
 
         # Authentication settings
         supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
@@ -155,11 +152,7 @@ class YDBMCPServer(FastMCP):
     def _restore_ydb_patches(self):
         """Restore original YDB methods that were patched."""
         # Restore topic client __del__ method
-        if (
-            "topic_client_del" in self._original_methods
-            and hasattr(ydb, "topic")
-            and hasattr(ydb.topic, "TopicClient")
-        ):
+        if "topic_client_del" in self._original_methods and hasattr(ydb, "topic") and hasattr(ydb.topic, "TopicClient"):
             if self._original_methods["topic_client_del"] is not None:
                 ydb.topic.TopicClient.__del__ = self._original_methods["topic_client_del"]
             else:
@@ -229,9 +222,7 @@ class YDBMCPServer(FastMCP):
             # Initialize driver with latest API
             await self.driver.wait(timeout=5.0)
             # Check if we connected successfully
-            debug_details = await self._loop.run_in_executor(
-                None, lambda: self.driver.discovery_debug_details()
-            )
+            debug_details = await self._loop.run_in_executor(None, lambda: self.driver.discovery_debug_details())
             if not debug_details.startswith("Resolved endpoints"):
                 self.auth_error = f"Failed to connect to YDB server: {debug_details}"
                 logger.error(self.auth_error)
@@ -274,9 +265,7 @@ class YDBMCPServer(FastMCP):
                             logger.warning(f"Error waiting for discovery task cancellation: {e}")
 
                 # Handle any streaming response generators that might be running
-                if hasattr(discovery, "_fetch_stream_responses") and callable(
-                    discovery._fetch_stream_responses
-                ):
+                if hasattr(discovery, "_fetch_stream_responses") and callable(discovery._fetch_stream_responses):
                     # This is a generator method that might be active
                     # Nothing to do directly - the generator will be GC'ed when the driver is destroyed
                     pass
@@ -313,9 +302,7 @@ class YDBMCPServer(FastMCP):
             # Wait briefly for tasks to cancel
             if discovery_tasks:
                 try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*discovery_tasks, return_exceptions=True), timeout=0.5
-                    )
+                    await asyncio.wait_for(asyncio.gather(*discovery_tasks, return_exceptions=True), timeout=0.5)
                 except (asyncio.TimeoutError, asyncio.CancelledError):
                     pass
 
@@ -376,11 +363,7 @@ class YDBMCPServer(FastMCP):
                 all_results.append(processed)
             # Convert all dict keys to strings for JSON serialization
             safe_result = self._stringify_dict_keys({"result_sets": all_results})
-            return [
-                TextContent(
-                    type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder)
-                )
-            ]
+            return [TextContent(type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder))]
         except Exception as e:
             error_message = str(e)
             safe_error = self._stringify_dict_keys({"error": error_message})
@@ -437,9 +420,7 @@ class YDBMCPServer(FastMCP):
         # Handle authentication errors
         if self.auth_error:
             logger.error(f"Authentication error: {self.auth_error}")
-            safe_error = self._stringify_dict_keys(
-                {"error": f"Authentication error: {self.auth_error}"}
-            )
+            safe_error = self._stringify_dict_keys({"error": f"Authentication error: {self.auth_error}"})
             return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
         parsed_params = {}
         try:
@@ -447,9 +428,7 @@ class YDBMCPServer(FastMCP):
                 parsed_params = json.loads(params)
         except json.JSONDecodeError as e:
             logger.error(f"Error parsing JSON parameters: {str(e)}")
-            safe_error = self._stringify_dict_keys(
-                {"error": f"Error parsing JSON parameters: {str(e)}"}
-            )
+            safe_error = self._stringify_dict_keys({"error": f"Error parsing JSON parameters: {str(e)}"})
             return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
         # Convert [value, type] to YDB type if needed
         ydb_params = {}
@@ -608,11 +587,7 @@ class YDBMCPServer(FastMCP):
                 await self.create_driver()
 
             if self.driver is None:
-                return [
-                    TextContent(
-                        type="text", text=json.dumps({"error": "Failed to create driver"}, indent=2)
-                    )
-                ]
+                return [TextContent(type="text", text=json.dumps({"error": "Failed to create driver"}, indent=2))]
 
             # Access the scheme client
             scheme_client = self.driver.scheme_client
@@ -650,17 +625,11 @@ class YDBMCPServer(FastMCP):
 
             # Convert all dict keys to strings for JSON serialization
             safe_result = self._stringify_dict_keys(result)
-            return [
-                TextContent(
-                    type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder)
-                )
-            ]
+            return [TextContent(type="text", text=json.dumps(safe_result, indent=2, cls=CustomJSONEncoder))]
 
         except Exception as e:
             logger.exception(f"Error listing directory {path}: {e}")
-            safe_error = self._stringify_dict_keys(
-                {"error": f"Error listing directory {path}: {str(e)}"}
-            )
+            safe_error = self._stringify_dict_keys({"error": f"Error listing directory {path}: {str(e)}"})
             return [TextContent(type="text", text=json.dumps(safe_error, indent=2))]
 
     async def describe_path(self, path: str) -> List[TextContent]:
@@ -748,14 +717,8 @@ class YDBMCPServer(FastMCP):
                             index_info = {
                                 "name": index.name,
                                 "index_columns": list(index.index_columns),
-                                "cover_columns": (
-                                    list(index.cover_columns)
-                                    if hasattr(index, "cover_columns")
-                                    else []
-                                ),
-                                "index_type": (
-                                    str(index.index_type) if hasattr(index, "index_type") else None
-                                ),
+                                "cover_columns": (list(index.cover_columns) if hasattr(index, "cover_columns") else []),
+                                "index_type": (str(index.index_type) if hasattr(index, "index_type") else None),
                             }
                             result["table"]["indexes"].append(index_info)
 
@@ -765,11 +728,7 @@ class YDBMCPServer(FastMCP):
                                 family_info = {
                                     "name": family.name,
                                     "data": family.data,
-                                    "compression": (
-                                        str(family.compression)
-                                        if hasattr(family, "compression")
-                                        else None
-                                    ),
+                                    "compression": (str(family.compression) if hasattr(family, "compression") else None),
                                 }
                                 result["table"]["column_families"].append(family_info)
 
@@ -789,21 +748,17 @@ class YDBMCPServer(FastMCP):
                             ps = table_desc.partitioning_settings
                             if ps:
                                 if hasattr(ps, "partition_at_keys"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_at_keys"
-                                    ] = ps.partition_at_keys
+                                    result["table"]["partitioning_settings"]["partition_at_keys"] = ps.partition_at_keys
                                 if hasattr(ps, "partition_by_size"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_by_size"
-                                    ] = ps.partition_by_size
+                                    result["table"]["partitioning_settings"]["partition_by_size"] = ps.partition_by_size
                                 if hasattr(ps, "min_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "min_partitions_count"
-                                    ] = ps.min_partitions_count
+                                    result["table"]["partitioning_settings"]["min_partitions_count"] = (
+                                        ps.min_partitions_count
+                                    )
                                 if hasattr(ps, "max_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "max_partitions_count"
-                                    ] = ps.max_partitions_count
+                                    result["table"]["partitioning_settings"]["max_partitions_count"] = (
+                                        ps.max_partitions_count
+                                    )
 
                     finally:
                         # Always release the session
@@ -816,9 +771,7 @@ class YDBMCPServer(FastMCP):
                         result["table"] = {
                             "columns": [],
                             "primary_key": (
-                                path_response.table.primary_key
-                                if hasattr(path_response.table, "primary_key")
-                                else []
+                                path_response.table.primary_key if hasattr(path_response.table, "primary_key") else []
                             ),
                             "indexes": [],
                             "partitioning_settings": {},
@@ -827,9 +780,7 @@ class YDBMCPServer(FastMCP):
                         # Add basic columns
                         if hasattr(path_response.table, "columns"):
                             for column in path_response.table.columns:
-                                result["table"]["columns"].append(
-                                    {"name": column.name, "type": str(column.type)}
-                                )
+                                result["table"]["columns"].append({"name": column.name, "type": str(column.type)})
 
                         # Add basic indexes
                         if hasattr(path_response.table, "indexes"):
@@ -838,9 +789,7 @@ class YDBMCPServer(FastMCP):
                                     {
                                         "name": index.name,
                                         "index_columns": (
-                                            list(index.index_columns)
-                                            if hasattr(index, "index_columns")
-                                            else []
+                                            list(index.index_columns) if hasattr(index, "index_columns") else []
                                         ),
                                     }
                                 )
@@ -850,21 +799,17 @@ class YDBMCPServer(FastMCP):
                             ps = path_response.table.partitioning_settings
                             if ps:
                                 if hasattr(ps, "partition_at_keys"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_at_keys"
-                                    ] = ps.partition_at_keys
+                                    result["table"]["partitioning_settings"]["partition_at_keys"] = ps.partition_at_keys
                                 if hasattr(ps, "partition_by_size"):
-                                    result["table"]["partitioning_settings"][
-                                        "partition_by_size"
-                                    ] = ps.partition_by_size
+                                    result["table"]["partitioning_settings"]["partition_by_size"] = ps.partition_by_size
                                 if hasattr(ps, "min_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "min_partitions_count"
-                                    ] = ps.min_partitions_count
+                                    result["table"]["partitioning_settings"]["min_partitions_count"] = (
+                                        ps.min_partitions_count
+                                    )
                                 if hasattr(ps, "max_partitions_count"):
-                                    result["table"]["partitioning_settings"][
-                                        "max_partitions_count"
-                                    ] = ps.max_partitions_count
+                                    result["table"]["partitioning_settings"]["max_partitions_count"] = (
+                                        ps.max_partitions_count
+                                    )
 
             # Convert to JSON string and return as TextContent
             formatted_result = json.dumps(result, indent=2, cls=CustomJSONEncoder)
@@ -996,15 +941,11 @@ class YDBMCPServer(FastMCP):
             # Convert TextContent objects to dictionaries if needed
             if isinstance(result, list) and any(isinstance(item, TextContent) for item in result):
                 serializable_result = self._text_content_to_dict(result)
-                return serializable_result
+                return serializable_result  # type: ignore
 
             # Handle any other result type
             if result is None:
-                return [
-                    TextContent(
-                        type="text", text="Operation completed successfully but returned no data"
-                    )
-                ]
+                return [TextContent(type="text", text="Operation completed successfully but returned no data")]
 
             return result
 
@@ -1023,10 +964,10 @@ class YDBMCPServer(FastMCP):
 
     def run(self):
         """Run the YDB MCP server using the FastMCP server implementation."""
-        print(f"Starting YDB MCP server")
+        print("Starting YDB MCP server")
         print(f"YDB endpoint: {self.endpoint or 'Not set'}")
         print(f"YDB database: {self.database or 'Not set'}")
-        logger.info(f"Starting YDB MCP server")
+        logger.info("Starting YDB MCP server")
 
         # Use FastMCP's built-in run method with stdio transport
         super().run(transport="stdio")
@@ -1042,15 +983,15 @@ class YDBMCPServer(FastMCP):
 
         supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
         if self.auth_mode not in supported_auth_modes:
-            self.auth_error = f"Unsupported auth mode: {self.auth_mode}. Supported modes: {', '.join(supported_auth_modes)}"
+            self.auth_error = (
+                f"Unsupported auth mode: {self.auth_mode}. Supported modes: {', '.join(supported_auth_modes)}"
+            )
             return None
 
         # If auth_mode is login_password and we have both login and password, use them
         if self.auth_mode == AUTH_MODE_LOGIN_PASSWORD:
             if not self.login or not self.password:
-                self.auth_error = (
-                    "Login and password must be provided for login-password authentication mode."
-                )
+                self.auth_error = "Login and password must be provided for login-password authentication mode."
                 return None
             logger.info(f"Using login/password authentication with user '{self.login}'")
             return self._login_password_credentials

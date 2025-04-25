@@ -1,6 +1,7 @@
 """Integration tests for YDB directory and table operations (list_directory, describe_path, table creation, and cleanup).
 
-These tests validate the functionality of YDB directory listing, path description, and table operations including creation and cleanup.
+These tests validate the functionality of YDB directory listing, path description, and table operations
+including creation and cleanup.
 They test real YDB interactions without mocks, requiring a running YDB instance.
 """
 
@@ -104,9 +105,7 @@ async def test_list_directory_after_table_creation(mcp_server):
 
     finally:
         # Clean up - drop the table
-        cleanup_result = await call_mcp_tool(
-            mcp_server, "ydb_query", sql=f"DROP TABLE {test_table_name};"
-        )
+        cleanup_result = await call_mcp_tool(mcp_server, "ydb_query", sql=f"DROP TABLE {test_table_name};")
         logger.debug(f"Table cleanup result: {cleanup_result}")
 
 
@@ -123,17 +122,11 @@ async def test_path_description(mcp_server):
         describe_result = await call_mcp_tool(mcp_server, "ydb_describe_path", path=item_path)
         path_data = parse_text_content(describe_result)
         assert "path" in path_data, f"Missing 'path' field in path data: {path_data}"
-        assert (
-            path_data["path"] == item_path
-        ), f"Expected path to be '{item_path}', got {path_data['path']}"
+        assert path_data["path"] == item_path, f"Expected path to be '{item_path}', got {path_data['path']}"
         assert "type" in path_data, f"Missing 'type' field in path data: {path_data}"
         assert "name" in path_data, f"Missing 'name' field in path data: {path_data}"
         assert "owner" in path_data, f"Missing 'owner' field in path data: {path_data}"
         if path_data["type"] == "TABLE":
             assert "table" in path_data, f"Missing 'table' field for TABLE: {path_data}"
-            assert (
-                "columns" in path_data["table"]
-            ), f"Missing 'columns' field in table data: {path_data}"
-            assert (
-                len(path_data["table"]["columns"]) > 0
-            ), f"Table should have at least one column: {path_data}"
+            assert "columns" in path_data["table"], f"Missing 'columns' field in table data: {path_data}"
+            assert len(path_data["table"]["columns"]) > 0, f"Table should have at least one column: {path_data}"

@@ -15,7 +15,7 @@ sys.modules["mcp.server.handler"].RequestHandler = MockRequestHandler
 sys.modules["mcp.server.handler"].register_handler = mock_register_handler
 
 # Import after mocking
-from ydb_mcp.connection import YDBConnection
+from ydb_mcp.connection import YDBConnection  # noqa: E402
 
 
 class TestYDBConnection(unittest.TestCase):
@@ -45,9 +45,7 @@ class TestYDBConnection(unittest.TestCase):
         # Setup mocks
         mock_driver = AsyncMock()
         mock_driver.wait = AsyncMock(return_value=True)
-        mock_driver.discovery_debug_details = MagicMock(
-            return_value="Resolved endpoints: localhost:2136"
-        )
+        mock_driver.discovery_debug_details = MagicMock(return_value="Resolved endpoints: localhost:2136")
         mock_driver_class.return_value = mock_driver
 
         with patch("ydb.aio.QuerySessionPool") as mock_session_pool_class:
@@ -84,9 +82,7 @@ class TestYDBConnection(unittest.TestCase):
         # Setup mocks
         mock_driver = AsyncMock()
         mock_driver.wait = AsyncMock(return_value=True)
-        mock_driver.discovery_debug_details = MagicMock(
-            return_value="Resolved endpoints: localhost:2136"
-        )
+        mock_driver.discovery_debug_details = MagicMock(return_value="Resolved endpoints: localhost:2136")
         mock_driver_class.return_value = mock_driver
 
         with patch("ydb.aio.QuerySessionPool") as mock_session_pool_class:
@@ -125,9 +121,7 @@ class TestYDBConnection(unittest.TestCase):
         # Setup mocks
         mock_driver = AsyncMock()
         mock_driver.wait = AsyncMock(return_value=True)
-        mock_driver.discovery_debug_details = MagicMock(
-            return_value="Resolved endpoints: localhost:2136"
-        )
+        mock_driver.discovery_debug_details = MagicMock(return_value="Resolved endpoints: localhost:2136")
         mock_driver_class.return_value = mock_driver
 
         with patch("ydb.aio.QuerySessionPool") as mock_session_pool_class:

@@ -43,15 +43,12 @@ run-server:
 
 # Run lint checks
 lint: dev
-	flake8 ydb_mcp tests
+	ruff check ydb_mcp tests
 	mypy ydb_mcp
-	black --check ydb_mcp tests
-	isort --check-only --profile black ydb_mcp tests
 
 # Format code
 format: dev
-	black ydb_mcp tests
-	isort --profile black ydb_mcp tests
+	ruff format ydb_mcp tests
 
 # Install package
 install:
@@ -60,4 +57,3 @@ install:
 # Install development dependencies
 dev:
 	pip install -e ".[dev]"
-	pip install -r requirements-dev.txt

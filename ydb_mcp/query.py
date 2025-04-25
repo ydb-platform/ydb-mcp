@@ -78,9 +78,12 @@ class QueryExecutor:
                     result.append(self._convert_row_to_dict(row))
             return result
 
+        if self._session_pool is None:
+            raise RuntimeError("SessionPool is not provided.")
+
         return self._session_pool.retry_operation_sync(_execute_query)
 
-    def _convert_row_to_dict(self, row: Any, col_names: List[str] = None) -> Dict[str, Any]:
+    def _convert_row_to_dict(self, row: Any, col_names: List[str] | None = None) -> Dict[str, Any]:
         """Convert a YDB result row to a dictionary.
 
         Args:
@@ -125,9 +128,7 @@ class QueryExecutor:
         if isinstance(value, list):
             return [self._convert_ydb_value(item) for item in value]
         if isinstance(value, dict):
-            return {
-                self._convert_ydb_value(k): self._convert_ydb_value(v) for k, v in value.items()
-            }
+            return {self._convert_ydb_value(k): self._convert_ydb_value(v) for k, v in value.items()}
         if isinstance(value, tuple):
             return tuple(self._convert_ydb_value(item) for item in value)
 

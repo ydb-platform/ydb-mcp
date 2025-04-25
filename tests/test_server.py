@@ -1,19 +1,16 @@
 """Unit tests for YDB MCP server implementation."""
 
 import asyncio
-import base64
 import datetime
 import decimal
 import json
 
 # Patch the mcp module before importing the YDBMCPServer
 import sys
-import unittest
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 import ydb
-from mcp import Tool
 from mcp.types import TextContent
 
 sys.modules["mcp.server"] = MagicMock()
@@ -21,7 +18,7 @@ sys.modules["mcp.server.handler"] = MagicMock()
 sys.modules["mcp.server.handler"].RequestHandler = MagicMock
 sys.modules["mcp.server.handler"].register_handler = lambda name: lambda cls: cls
 
-from ydb_mcp.server import CustomJSONEncoder, YDBMCPServer
+from ydb_mcp.server import CustomJSONEncoder, YDBMCPServer  # noqa: E402
 
 
 @pytest.mark.unit
@@ -31,9 +28,7 @@ class TestYDBMCPServer:
     # Initialization tests
     async def test_init_with_env_vars(self):
         """Test initialization with environment variables."""
-        with patch(
-            "os.environ", {"YDB_ENDPOINT": "test-endpoint", "YDB_DATABASE": "test-database"}
-        ):
+        with patch("os.environ", {"YDB_ENDPOINT": "test-endpoint", "YDB_DATABASE": "test-database"}):
             with patch.object(YDBMCPServer, "register_tools"):
                 server = YDBMCPServer()
                 assert server.endpoint == "test-endpoint"
@@ -98,23 +93,17 @@ class TestYDBMCPServer:
             server = YDBMCPServer(endpoint="test-endpoint", database="test-database")
 
             # Mock server.query method
-            server.query = AsyncMock(
-                return_value={"result_sets": [{"columns": ["test"], "rows": [["data"]]}]}
-            )
+            server.query = AsyncMock(return_value={"result_sets": [{"columns": ["test"], "rows": [["data"]]}]})
 
             # Create params as a JSON string
             params_json = json.dumps({"$param1": 123, "param2": "value"})
 
             # Execute query with params
-            result = await server.query_with_params(
-                "SELECT * FROM table WHERE id = $param1", params_json
-            )
+            result = await server.query_with_params("SELECT * FROM table WHERE id = $param1", params_json)
 
             # Check the query was executed with correct parameters
             expected_params = {"$param1": 123, "$param2": "value"}
-            server.query.assert_called_once_with(
-                "SELECT * FROM table WHERE id = $param1", expected_params
-            )
+            server.query.assert_called_once_with("SELECT * FROM table WHERE id = $param1", expected_params)
 
             # Check the result
             assert result == {"result_sets": [{"columns": ["test"], "rows": [["data"]]}]}
@@ -216,9 +205,9 @@ class TestYDBMCPServer:
 
                 # Verify the error message indicates an authentication problem
                 error_message = str(excinfo.value).lower()
-                assert (
-                    "authentication" in error_message or "invalid" in error_message
-                ), f"Expected authentication error, got: {error_message}"
+                assert "authentication" in error_message or "invalid" in error_message, (
+                    f"Expected authentication error, got: {error_message}"
+                )
 
     # Directory and path tests
     async def test_list_directory(self):

@@ -15,7 +15,6 @@ from contextlib import suppress
 from urllib.parse import urlparse
 
 import pytest
-import ydb
 
 from tests.docker_utils import start_ydb_container, stop_container, wait_for_port
 from ydb_mcp.server import AUTH_MODE_ANONYMOUS, YDBMCPServer
@@ -279,7 +278,7 @@ async def session_mcp_server(ydb_server):
 
 
 @pytest.fixture(scope="function")
-async def mcp_server(session_mcp_server):
+async def mcp_server(session_mcp_server):  # noqa: F811
     """Provide a clean MCP server connection for each test by restarting the connection."""
     if session_mcp_server is None:
         pytest.fail("Could not get a valid MCP server instance")

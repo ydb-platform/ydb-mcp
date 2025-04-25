@@ -103,7 +103,7 @@ def main():
         auth_mode=auth_mode,
     )
 
-    print(f"Starting YDB MCP server with stdio transport")
+    print("Starting YDB MCP server with stdio transport")
     print(f"YDB endpoint: {args.ydb_endpoint or 'Not set'}")
     print(f"YDB database: {args.ydb_database or 'Not set'}")
     print(f"YDB login: {'Set' if args.ydb_login else 'Not set'}")

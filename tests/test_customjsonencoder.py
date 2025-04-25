@@ -5,8 +5,6 @@ import datetime
 import decimal
 import json
 
-import pytest
-
 from ydb_mcp.server import CustomJSONEncoder
 
 
@@ -38,9 +36,7 @@ def test_datetime_serialization():
     assert deserialized["datetime"] == "2023-07-15T12:30:45"
     assert deserialized["date"] == "2023-07-15"
     assert deserialized["time"] == "12:30:45"
-    assert (
-        deserialized["timedelta"] == "93784.567s"
-    )  # 1 day, 2 hours, 3 minutes, 4.567 seconds in seconds
+    assert deserialized["timedelta"] == "93784.567s"  # 1 day, 2 hours, 3 minutes, 4.567 seconds in seconds
     assert deserialized["nested"]["datetime"] == "2023-07-15T12:30:45"
     assert deserialized["list_with_dates"][0] == "2023-07-15"
     assert deserialized["list_with_dates"][1] == "2023-07-15T12:30:45"
