@@ -2,7 +2,9 @@
 
 [Model Context Protocol server](https://modelcontextprotocol.io/) for [YDB](https://ydb.tech). It allows to work with YDB databases from any [LLM](https://en.wikipedia.org/wiki/Large_language_model) that supports MCP. This integration enables AI-powered database operations and natural language interactions with your YDB instances.
 
-## Installation
+## Usage
+
+### Via pip
 
 YDB MCP can be installed using `pip`, [Python's package installer](https://pypi.org/project/pip/). The package is [available on PyPI](https://pypi.org/project/ydb-mcp/) and includes all necessary dependencies.
 
@@ -10,9 +12,9 @@ YDB MCP can be installed using `pip`, [Python's package installer](https://pypi.
 pip install ydb-mcp
 ```
 
-## Usage
+To get started with YDB MCP, you'll need to configure your MCP client to communicate with the YDB instance. Below are example configuration files that you can customize according to your setup and then put into MCP client's settings. Path to the Python interpreter might also need to be adjusted to the correct virtual environment that has the `ydb-mcp` package installed.
 
-To get started with YDB MCP, you'll need to configure your MCP client to communicate with the YDB instance. Below is an example configuration file that you can customize according to your setup and then put into MCP client's settings.
+#### Example: Using Anonymous Authentication
 
 ```json
 {
@@ -28,7 +30,7 @@ To get started with YDB MCP, you'll need to configure your MCP client to communi
 }
 ```
 
-### Example: Using login/password authentication
+#### Example: Using Login/Password Authentication
 
 To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-login`, and `--ydb-password` arguments:
 
@@ -49,7 +51,48 @@ To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-logi
 }
 ```
 
-## Available tools
+### Via pipx
+
+[pipx](https://pipx.pypa.io/stable/) allows you to run various applications from PyPI without explicitly installing each one. However, it must be [installed](https://pipx.pypa.io/stable/#install-pipx) first. Below are examples of how to configure YDB MCP using `pipx`.
+
+#### Example: Using Anonymous Authentication
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "pipx",
+      "args": [
+        "run", "ydb-mcp",
+        "--ydb-endpoint", "grpc://localhost:2136/local"
+      ]
+    }
+  }
+}
+```
+
+#### Example: Using Login/Password Authentication
+
+To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-login`, and `--ydb-password` arguments:
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "pipx",
+      "args": [
+        "run", "ydb-mcp",
+        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-auth-mode", "login-password",
+        "--ydb-login", "<your-username>",
+        "--ydb-password", "<your-password>"
+      ]
+    }
+  }
+}
+```
+
+## Available Tools
 
 YDB MCP provides the following tools for interacting with YDB databases:
 
