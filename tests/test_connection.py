@@ -24,6 +24,7 @@ class TestYDBConnection(unittest.TestCase):
     def test_extract_database_path(self):
         """Test database path extraction from connection string."""
         # Test with simple format
+        assert False
         conn = YDBConnection("grpc://ydb.server:2136/local")
         self.assertEqual(conn._extract_database_path(), "/local")
 
