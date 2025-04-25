@@ -138,9 +138,11 @@ class YDBMCPServer(FastMCP):
 
         # Authentication settings
         supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
-        self.auth_mode = (auth_mode or AUTH_MODE_ANONYMOUS)
+        self.auth_mode = auth_mode or AUTH_MODE_ANONYMOUS
         if self.auth_mode not in supported_auth_modes:
-            raise ValueError(f"Unsupported auth mode: {self.auth_mode}. Supported modes: {', '.join(supported_auth_modes)}")
+            raise ValueError(
+                f"Unsupported auth mode: {self.auth_mode}. Supported modes: {', '.join(supported_auth_modes)}"
+            )
         self.login = login
         self.password = password
 
@@ -998,7 +1000,11 @@ class YDBMCPServer(FastMCP):
 
             # Handle any other result type
             if result is None:
-                return [TextContent(type="text", text="Operation completed successfully but returned no data")]
+                return [
+                    TextContent(
+                        type="text", text="Operation completed successfully but returned no data"
+                    )
+                ]
 
             return result
 
@@ -1042,7 +1048,9 @@ class YDBMCPServer(FastMCP):
         # If auth_mode is login_password and we have both login and password, use them
         if self.auth_mode == AUTH_MODE_LOGIN_PASSWORD:
             if not self.login or not self.password:
-                self.auth_error = "Login and password must be provided for login-password authentication mode."
+                self.auth_error = (
+                    "Login and password must be provided for login-password authentication mode."
+                )
                 return None
             logger.info(f"Using login/password authentication with user '{self.login}'")
             return self._login_password_credentials

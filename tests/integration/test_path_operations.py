@@ -123,11 +123,17 @@ async def test_path_description(mcp_server):
         describe_result = await call_mcp_tool(mcp_server, "ydb_describe_path", path=item_path)
         path_data = parse_text_content(describe_result)
         assert "path" in path_data, f"Missing 'path' field in path data: {path_data}"
-        assert path_data["path"] == item_path, f"Expected path to be '{item_path}', got {path_data['path']}"
+        assert (
+            path_data["path"] == item_path
+        ), f"Expected path to be '{item_path}', got {path_data['path']}"
         assert "type" in path_data, f"Missing 'type' field in path data: {path_data}"
         assert "name" in path_data, f"Missing 'name' field in path data: {path_data}"
         assert "owner" in path_data, f"Missing 'owner' field in path data: {path_data}"
         if path_data["type"] == "TABLE":
             assert "table" in path_data, f"Missing 'table' field for TABLE: {path_data}"
-            assert "columns" in path_data["table"], f"Missing 'columns' field in table data: {path_data}"
-            assert len(path_data["table"]["columns"]) > 0, f"Table should have at least one column: {path_data}"
+            assert (
+                "columns" in path_data["table"]
+            ), f"Missing 'columns' field in table data: {path_data}"
+            assert (
+                len(path_data["table"]["columns"]) > 0
+            ), f"Table should have at least one column: {path_data}"

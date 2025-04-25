@@ -1,12 +1,14 @@
+import logging
 import os
+import platform
 import socket
 import time
-import logging
-import pytest
-import platform
+
 import docker
+import pytest
 
 logger = logging.getLogger(__name__)
+
 
 def get_docker_client():
     """Connect to Docker daemon via multiple methods or fail."""
@@ -44,6 +46,7 @@ def get_docker_client():
     logger.error("Docker connection errors:\n%s", "\n".join(connection_errors))
     pytest.fail("Could not connect to Docker. Make sure Docker daemon is running.")
 
+
 def start_container(image: str, **kwargs):
     """Pull and run a Docker container with given parameters."""
     client = get_docker_client()
@@ -53,12 +56,14 @@ def start_container(image: str, **kwargs):
     container = client.containers.run(image=image, **kwargs)
     return container
 
+
 def stop_container(container):
     """Stop the given Docker container."""
     try:
         container.stop(timeout=1)
     except Exception:
         logger.warning("Error stopping container %s", container)
+
 
 def wait_for_port(host: str, port: int, timeout: int = 30):
     """Wait until given host:port is accepting connections or fail."""
@@ -72,6 +77,7 @@ def wait_for_port(host: str, port: int, timeout: int = 30):
                 pass
         time.sleep(1)
     pytest.fail(f"Port {host}:{port} not ready after {timeout}s")
+
 
 def start_ydb_container():
     """Start a YDB Docker container for integration tests."""
@@ -95,6 +101,7 @@ def start_ydb_container():
         ports=ports,
     )
     return container
+
 
 def start_ollama_container():
     """Start an Ollama Docker container for integration tests by pulling `llama2` and serving it."""

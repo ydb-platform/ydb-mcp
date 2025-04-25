@@ -17,8 +17,8 @@ from urllib.parse import urlparse
 import pytest
 import ydb
 
-from ydb_mcp.server import AUTH_MODE_ANONYMOUS, YDBMCPServer
 from tests.docker_utils import start_ydb_container, stop_container, wait_for_port
+from ydb_mcp.server import AUTH_MODE_ANONYMOUS, YDBMCPServer
 
 # Configuration for the tests
 YDB_ENDPOINT = os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136/local")
@@ -53,14 +53,12 @@ async def cleanup_pending_tasks():
 
     # Get all pending tasks except the current one
     current = asyncio.current_task(loop)
-    pending = [
-        task for task in asyncio.all_tasks(loop) if not task.done() and task is not current
-    ]
+    pending = [task for task in asyncio.all_tasks(loop) if not task.done() and task is not current]
 
     # Explicitly suppress destroy pending warning for YDB Discovery.run tasks
     for task in pending:
-        coro = getattr(task, 'get_coro', lambda: None)()
-        if coro and 'Discovery.run' in repr(coro):
+        coro = getattr(task, "get_coro", lambda: None)()
+        if coro and "Discovery.run" in repr(coro):
             task._log_destroy_pending = False
 
     if not pending:
@@ -84,9 +82,7 @@ async def cleanup_pending_tasks():
     # Force cancel any remaining tasks
     still_pending = [t for t in pending if not t.done()]
     if still_pending:
-        logger.debug(
-            f"Force cancelling {len(still_pending)} tasks that did not cancel properly"
-        )
+        logger.debug(f"Force cancelling {len(still_pending)} tasks that did not cancel properly")
         for task in still_pending:
             # Ensure the task won't log warnings when destroyed
             task._log_destroy_pending = False
