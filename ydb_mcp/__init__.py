@@ -1,6 +1,8 @@
 """YDB MCP - Model Context Protocol server for YDB."""
+from .version import VERSION
 
-__version__ = "0.1.0"
+
+__version__ = VERSION
 
 # Import order matters to avoid circular imports
 from ydb_mcp.connection import YDBConnection

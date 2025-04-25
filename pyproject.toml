@@ -4,26 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ydb-mcp"
-version = "0.1.0"
+version = "0.1.0"  # AUTOVERSION
 description = "Model Context Protocol server for YDB DBMS"
 readme = "README.md"
 authors = [
     {name = "YDB MCP Team", email = "info@ydb.tech"}
 ]
 license = {text = "Apache 2.0"}
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "ydb>=3.0.0",
-    "mcp-server>=0.1.0",
-    "httpx>=0.25.0",
+    "ydb>=3.21.0",
+    "mcp>=1.6.0",
 ]
 
 [project.optional-dependencies]
