@@ -4,7 +4,7 @@
 
 ## Installation
 
-YDB MCP can be installed using `pip`, [Python's package installer](https://pypi.org/project/pip/). The package is [available on PyPI](https://pypi.org/) and includes all necessary dependencies.
+YDB MCP can be installed using `pip`, [Python's package installer](https://pypi.org/project/pip/). The package is [available on PyPI](https://pypi.org/project/ydb-mcp/) and includes all necessary dependencies.
 
 ```bash
 pip install ydb-mcp
