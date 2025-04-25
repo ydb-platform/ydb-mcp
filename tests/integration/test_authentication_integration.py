@@ -14,9 +14,7 @@ from tests.integration.conftest import call_mcp_tool
 from ydb_mcp.server import AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD
 
 # Suppress the utcfromtimestamp deprecation warning from the YDB library
-warnings.filterwarnings(
-    "ignore", message="datetime.datetime.utcfromtimestamp.*", category=DeprecationWarning
-)
+warnings.filterwarnings("ignore", message="datetime.datetime.utcfromtimestamp.*", category=DeprecationWarning)
 
 # Table name used for tests - using timestamp to avoid conflicts
 TEST_TABLE = f"mcp_integration_test_{int(time.time())}"
@@ -58,12 +56,7 @@ async def test_login_password_authentication(mcp_server):
         # Verify we can execute a query
         result = await call_mcp_tool(mcp_server, "ydb_query", sql="SELECT 1+1 as result")
         # Parse the JSON from the 'text' field if present
-        if (
-            isinstance(result, list)
-            and len(result) > 0
-            and isinstance(result[0], dict)
-            and "text" in result[0]
-        ):
+        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict) and "text" in result[0]:
             parsed = json.loads(result[0]["text"])
         else:
             parsed = result
@@ -80,12 +73,7 @@ async def test_login_password_authentication(mcp_server):
         # Query should fail with auth error
         result = await call_mcp_tool(mcp_server, "ydb_query", sql="SELECT 1+1 as result")
         # Parse the JSON from the 'text' field if present
-        if (
-            isinstance(result, list)
-            and len(result) > 0
-            and isinstance(result[0], dict)
-            and "text" in result[0]
-        ):
+        if isinstance(result, list) and len(result) > 0 and isinstance(result[0], dict) and "text" in result[0]:
             parsed = json.loads(result[0]["text"])
         else:
             parsed = result
@@ -111,9 +99,9 @@ async def test_login_password_authentication(mcp_server):
             # Allow empty error message as valid
             pass
         else:
-            assert any(
-                keyword in error_msg for keyword in all_keywords
-            ), f"Unexpected error message: {parsed.get('error')}"
+            assert any(keyword in error_msg for keyword in all_keywords), (
+                f"Unexpected error message: {parsed.get('error')}"
+            )
 
     finally:
         # Switch back to anonymous auth to clean up (fixture will handle final state reset)

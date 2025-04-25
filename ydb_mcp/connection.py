@@ -5,7 +5,6 @@ from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 import ydb
-from ydb.aio import QuerySessionPool
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 class YDBConnection:
     """Manages YDB connection with async support."""
 
-    def __init__(self, connection_string: str, database: str = None):
+    def __init__(self, connection_string: str, database: str | None = None):
         """Initialize YDB connection.
 
         Args:
@@ -24,7 +23,7 @@ class YDBConnection:
         self.driver: Optional[ydb.Driver] = None
         self.session_pool: Optional[ydb.aio.QuerySessionPool] = None
         self._database = database
-        self.last_error = None
+        self.last_error: str | None = None
 
     def _parse_endpoint_and_database(self) -> Tuple[str, str]:
         """Parse endpoint and database from connection string.
@@ -94,7 +93,7 @@ class YDBConnection:
                 await asyncio.wait_for(self.driver.wait(), timeout=10.0)
             except asyncio.TimeoutError:
                 self.last_error = "Connection timeout"
-                raise RuntimeError(f"YDB driver connection timeout after 10 seconds")
+                raise RuntimeError("YDB driver connection timeout after 10 seconds")
 
             # Check if we connected successfully
             if not self.driver.discovery_debug_details().startswith("Resolved endpoints"):

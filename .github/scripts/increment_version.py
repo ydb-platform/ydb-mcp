@@ -97,17 +97,13 @@ def extract_version(pyproject_content: str):
     return VersionLine(old_line=version_line, version_str=version_part)
 
 
-def increment_version_at_pyproject(
-    pyproject_path: str, inc_type: str, with_beta: bool
-) -> str:
+def increment_version_at_pyproject(pyproject_path: str, inc_type: str, with_beta: bool) -> str:
     with open(pyproject_path, "rt") as f:
         setup_content = f.read()
 
     version = extract_version(setup_content)
     version.increment(inc_type, with_beta)
-    setup_content = setup_content.replace(
-        version.old_line, version.version_line_with_mark()
-    )
+    setup_content = setup_content.replace(version.old_line, version.version_line_with_mark())
 
     with open(pyproject_path, "w") as f:
         f.write(setup_content)
@@ -143,9 +139,7 @@ def main():
         help="increment version type: patch or minor",
         choices=["minor", "patch"],
     )
-    parser.add_argument(
-        "--beta", choices=["true", "false"], help="is beta version"
-    )
+    parser.add_argument("--beta", choices=["true", "false"], help="is beta version")
     parser.add_argument(
         "--changelog-path",
         default=DEFAULT_CHANGELOG_PATH,
@@ -158,9 +152,7 @@ def main():
 
     is_beta = args.beta == "true"
 
-    new_version = increment_version_at_pyproject(
-        args.pyproject_path, args.inc_type, is_beta
-    )
+    new_version = increment_version_at_pyproject(args.pyproject_path, args.inc_type, is_beta)
     add_changelog_version(args.changelog_path, new_version)
     set_version_in_version_file(DEFAULT_YDB_VERSION_FILE, new_version)
     print(new_version)

@@ -1,6 +1,6 @@
 """Mock classes for testing."""
 
-from typing import Any, Callable, Dict, Optional, Type
+from typing import Callable, Type
 
 
 class MockRequestHandler:

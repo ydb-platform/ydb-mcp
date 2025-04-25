@@ -1,6 +1,6 @@
 """YDB MCP - Model Context Protocol server for YDB."""
-from .version import VERSION
 
+from .version import VERSION
 
 __version__ = VERSION
 

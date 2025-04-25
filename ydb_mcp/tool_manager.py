@@ -4,9 +4,7 @@ from typing import Any, Callable, Dict, List, Optional
 class ToolDefinition:
     """Defines a tool that can be called by the MCP."""
 
-    def __init__(
-        self, name: str, handler: Callable, description: str = "", parameters: Optional[Dict] = None
-    ):
+    def __init__(self, name: str, handler: Callable, description: str = "", parameters: Optional[Dict] = None):
         """Initialize a tool definition.
 
         Args:
@@ -39,9 +37,7 @@ class ToolManager:
             description: Tool description
             parameters: JSON schema for tool parameters
         """
-        self._tools[name] = ToolDefinition(
-            name=name, handler=handler, description=description, parameters=parameters
-        )
+        self._tools[name] = ToolDefinition(name=name, handler=handler, description=description, parameters=parameters)
 
     def get(self, name: str) -> Optional[ToolDefinition]:
         """Get a tool by name.
@@ -70,7 +66,7 @@ class ToolManager:
         """
         result = []
         for name, tool in self._tools.items():
-            tool_schema = {
+            tool_schema: Dict[str, Any] = {
                 "name": name,
                 "description": tool.description,
             }

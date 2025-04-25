@@ -15,8 +15,8 @@ sys.modules["mcp.server.handler"].RequestHandler = MockRequestHandler
 sys.modules["mcp.server.handler"].register_handler = mock_register_handler
 
 # Import modules after mocking
-from ydb_mcp.connection import YDBConnection
-from ydb_mcp.query import QueryExecutor
+from ydb_mcp.connection import YDBConnection  # noqa: E402
+from ydb_mcp.query import QueryExecutor  # noqa: E402
 
 
 class TestQueryExecutor(unittest.TestCase):
@@ -103,9 +103,7 @@ class TestQueryExecutor(unittest.TestCase):
         """Test _execute_query_sync method."""
         # Setup session pool to return mock session
         mock_session = MagicMock()
-        self.mock_connection.session_pool.retry_operation_sync.side_effect = (
-            lambda callback: callback(mock_session)
-        )
+        self.mock_connection.session_pool.retry_operation_sync.side_effect = lambda callback: callback(mock_session)
 
         # Setup transaction mock
         mock_transaction = MagicMock()
