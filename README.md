@@ -1,18 +1,15 @@
 # YDB MCP
+---
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb-mcp/blob/main/LICENSE)
+[![PyPI version](https://badge.fury.io/py/ydb-mcp.svg)](https://badge.fury.io/py/ydb-mcp)
 
 [Model Context Protocol server](https://modelcontextprotocol.io/) for [YDB](https://ydb.tech). It allows to work with YDB databases from any [LLM](https://en.wikipedia.org/wiki/Large_language_model) that supports MCP. This integration enables AI-powered database operations and natural language interactions with your YDB instances.
 
 ## Usage
 
-### Via pip
+### Via uvx
 
-YDB MCP can be installed using `pip`, [Python's package installer](https://pypi.org/project/pip/). The package is [available on PyPI](https://pypi.org/project/ydb-mcp/) and includes all necessary dependencies.
-
-```bash
-pip install ydb-mcp
-```
-
-To get started with YDB MCP, you'll need to configure your MCP client to communicate with the YDB instance. Below are example configuration files that you can customize according to your setup and then put into MCP client's settings. Path to the Python interpreter might also need to be adjusted to the correct virtual environment that has the `ydb-mcp` package installed.
+[uvx](https://docs.astral.sh/uv/concepts/tools/), which is an allias for `uv run tool`, allows you to run various python applications without explicitly installing them. Below are examples of how to configure YDB MCP using `uvx`.
 
 #### Example: Using Anonymous Authentication
 
@@ -20,9 +17,9 @@ To get started with YDB MCP, you'll need to configure your MCP client to communi
 {
   "mcpServers": {
     "ydb": {
-      "command": "python3",
+      "command": "uvx",
       "args": [
-        "-m", "ydb_mcp",
+        "ydb-mcp",
         "--ydb-endpoint", "grpc://localhost:2136/local"
       ]
     }
@@ -38,9 +35,9 @@ To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-logi
 {
   "mcpServers": {
     "ydb": {
-      "command": "python3",
+      "command": "uvx",
       "args": [
-        "-m", "ydb_mcp",
+        "ydb-mcp",
         "--ydb-endpoint", "grpc://localhost:2136/local",
         "--ydb-auth-mode", "login-password",
         "--ydb-login", "<your-username>",
@@ -82,6 +79,53 @@ To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-logi
       "command": "pipx",
       "args": [
         "run", "ydb-mcp",
+        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-auth-mode", "login-password",
+        "--ydb-login", "<your-username>",
+        "--ydb-password", "<your-password>"
+      ]
+    }
+  }
+}
+```
+
+### Via pip
+
+YDB MCP can be installed using `pip`, [Python's package installer](https://pypi.org/project/pip/). The package is [available on PyPI](https://pypi.org/project/ydb-mcp/) and includes all necessary dependencies.
+
+```bash
+pip install ydb-mcp
+```
+
+To get started with YDB MCP, you'll need to configure your MCP client to communicate with the YDB instance. Below are example configuration files that you can customize according to your setup and then put into MCP client's settings. Path to the Python interpreter might also need to be adjusted to the correct virtual environment that has the `ydb-mcp` package installed.
+
+#### Example: Using Anonymous Authentication
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "python3",
+      "args": [
+        "-m", "ydb_mcp",
+        "--ydb-endpoint", "grpc://localhost:2136/local"
+      ]
+    }
+  }
+}
+```
+
+#### Example: Using Login/Password Authentication
+
+To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-login`, and `--ydb-password` arguments:
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "python3",
+      "args": [
+        "-m", "ydb_mcp",
         "--ydb-endpoint", "grpc://localhost:2136/local",
         "--ydb-auth-mode", "login-password",
         "--ydb-login", "<your-username>",
