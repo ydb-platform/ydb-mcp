@@ -5,6 +5,10 @@
 
 [Model Context Protocol server](https://modelcontextprotocol.io/) for [YDB](https://ydb.tech). It allows to work with YDB databases from any [LLM](https://en.wikipedia.org/wiki/Large_language_model) that supports MCP. This integration enables AI-powered database operations and natural language interactions with your YDB instances.
 
+<a href="https://glama.ai/mcp/servers/@ydb-platform/ydb-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@ydb-platform/ydb-mcp/badge" alt="YDB MCP server" />
+</a>
+
 ## Usage
 
 ### Via uvx
