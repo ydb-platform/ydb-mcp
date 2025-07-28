@@ -5,7 +5,13 @@ import logging
 import os
 import sys
 
-from ydb_mcp.server import AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD, YDBMCPServer
+from ydb_mcp.server import (
+    AUTH_MODE_ACCESS_TOKEN,
+    AUTH_MODE_ANONYMOUS,
+    AUTH_MODE_LOGIN_PASSWORD,
+    AUTH_MODE_SERVICE_ACCOUNT,
+    YDBMCPServer,
+)
 
 
 def parse_args():
@@ -66,7 +72,12 @@ def main():
     )
 
     # Validate auth mode and required credentials
-    supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
+    supported_auth_modes = {
+        AUTH_MODE_ANONYMOUS,
+        AUTH_MODE_LOGIN_PASSWORD,
+        AUTH_MODE_ACCESS_TOKEN,
+        AUTH_MODE_SERVICE_ACCOUNT,
+    }
     auth_mode = args.ydb_auth_mode or AUTH_MODE_ANONYMOUS
     if auth_mode not in supported_auth_modes:
         print(
@@ -81,26 +92,46 @@ def main():
                 file=sys.stderr,
             )
             exit(1)
+    if auth_mode == AUTH_MODE_ACCESS_TOKEN:
+        if not args.ydb_access_token:
+            print(
+                "Error: --ydb-access-token is required for access-token authentication mode.",
+                file=sys.stderr,
+            )
+            exit(1)
+    if auth_mode == AUTH_MODE_SERVICE_ACCOUNT:
+        if not args.ydb_sa_key_file:
+            print(
+                "Error: --ydb-sa-key-file is required for service-account authentication mode.",
+                file=sys.stderr,
+            )
+            exit(1)
 
     # Set environment variables for YDB if provided via arguments
     if args.ydb_endpoint:
         os.environ["YDB_ENDPOINT"] = args.ydb_endpoint
     if args.ydb_database:
         os.environ["YDB_DATABASE"] = args.ydb_database
+    if args.ydb_auth_mode:
+        os.environ["YDB_AUTH_MODE"] = args.ydb_auth_mode
     if args.ydb_login:
         os.environ["YDB_LOGIN"] = args.ydb_login
     if args.ydb_password:
         os.environ["YDB_PASSWORD"] = args.ydb_password
-    if args.ydb_auth_mode:
-        os.environ["YDB_AUTH_MODE"] = args.ydb_auth_mode
+    if args.ydb_sa_key_file:
+        os.environ["YDB_SA_KEY_FILE"] = args.ydb_sa_key_file
+    if args.ydb_access_token:
+        os.environ["YDB_ACCESS_TOKEN"] = args.ydb_access_token
 
     # Create and run the server
     server = YDBMCPServer(
         endpoint=args.ydb_endpoint,
         database=args.ydb_database,
+        auth_mode=auth_mode,
         login=args.ydb_login,
         password=args.ydb_password,
-        auth_mode=auth_mode,
+        access_token=args.ydb_access_token,
+        sa_key_file=args.ydb_sa_key_file,
     )
 
     print("Starting YDB MCP server with stdio transport")

@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 # Authentication mode constants
 AUTH_MODE_ANONYMOUS = "anonymous"
 AUTH_MODE_LOGIN_PASSWORD = "login-password"
+AUTH_MODE_ACCESS_TOKEN = "access-token"
+AUTH_MODE_SERVICE_ACCOUNT = "service-account"
 
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -99,6 +101,8 @@ class YDBMCPServer(FastMCP):
         auth_mode: str | None = None,
         login: str | None = None,
         password: str | None = None,
+        access_token: str | None = None,
+        sa_key_file: str | None = None,
         root_certificates: str | None = None,
         *args,
         **kwargs,
@@ -134,7 +138,12 @@ class YDBMCPServer(FastMCP):
         self._original_methods: Dict = {}
 
         # Authentication settings
-        supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
+        supported_auth_modes = {
+            AUTH_MODE_ANONYMOUS,
+            AUTH_MODE_LOGIN_PASSWORD,
+            AUTH_MODE_ACCESS_TOKEN,
+            AUTH_MODE_SERVICE_ACCOUNT,
+        }
         self.auth_mode = auth_mode or AUTH_MODE_ANONYMOUS
         if self.auth_mode not in supported_auth_modes:
             raise ValueError(
@@ -142,6 +151,9 @@ class YDBMCPServer(FastMCP):
             )
         self.login = login
         self.password = password
+
+        self.sa_key_file = sa_key_file
+        self.access_token = access_token
 
         # Initialize logging
         logging.basicConfig(level=logging.INFO)
@@ -170,6 +182,16 @@ class YDBMCPServer(FastMCP):
         """Create login-password credentials."""
         logger.info(f"Using login-password authentication with login: {self.login}")
         return ydb.credentials.StaticCredentials.from_user_password(self.login, self.password)
+
+    def _access_token_credentials(self) -> ydb.Credentials:
+        """Create access token credentials."""
+        logger.info("Using access token authentication")
+        return ydb.credentials.AccessTokenCredentials(self.access_token)
+
+    def _service_account_credentials(self) -> ydb.Credentials:
+        """Create service account credentials."""
+        logger.info(f"Using service account authentication with key file: {self.sa_key_file}")
+        return ydb.iam.ServiceAccountCredentials.from_file(self.sa_key_file)
 
     async def create_driver(self):
         """Create a YDB driver with the current settings.
@@ -995,6 +1017,18 @@ class YDBMCPServer(FastMCP):
                 return None
             logger.info(f"Using login/password authentication with user '{self.login}'")
             return self._login_password_credentials
+        if self.auth_mode == AUTH_MODE_SERVICE_ACCOUNT:
+            if not self.sa_key_file:
+                self.auth_error = "Service account key file must be provided for service-account authentication mode."
+                return None
+            logger.info(f"Using service-account authentication with key file '{self.sa_key_file}'")
+            return self._service_account_credentials
+        if self.auth_mode == AUTH_MODE_ACCESS_TOKEN:
+            if not self.access_token:
+                self.auth_error = "Access token must be provided for access-token authentication mode."
+                return None
+            logger.info("Using access-token authentication with token")
+            return self._access_token_credentials
         else:
             # Default to anonymous auth
             logger.info("Using anonymous authentication")
