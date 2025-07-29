@@ -1,3 +1,4 @@
+## 0.1.4 ##
 * Fix README instructions
 
 ## 0.1.3 ##
