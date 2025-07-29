@@ -1003,7 +1003,12 @@ class YDBMCPServer(FastMCP):
         # Clear any previous auth errors
         self.auth_error = None
 
-        supported_auth_modes = {AUTH_MODE_ANONYMOUS, AUTH_MODE_LOGIN_PASSWORD}
+        supported_auth_modes = {
+            AUTH_MODE_ANONYMOUS,
+            AUTH_MODE_LOGIN_PASSWORD,
+            AUTH_MODE_SERVICE_ACCOUNT,
+            AUTH_MODE_ACCESS_TOKEN,
+        }
         if self.auth_mode not in supported_auth_modes:
             self.auth_error = (
                 f"Unsupported auth mode: {self.auth_mode}. Supported modes: {', '.join(supported_auth_modes)}"

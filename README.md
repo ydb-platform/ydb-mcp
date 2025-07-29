@@ -24,7 +24,8 @@
       "command": "uvx",
       "args": [
         "ydb-mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local"
+        "--ydb-endpoint", "grpc://localhost:2136",
+        "--ydb-database", "/local"
       ]
     }
   }
@@ -44,7 +45,8 @@
       "command": "pipx",
       "args": [
         "run", "ydb-mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local"
+        "--ydb-endpoint", "grpc://localhost:2136",
+        "--ydb-database", "/local"
       ]
     }
   }
@@ -70,7 +72,8 @@ To get started with YDB MCP, you'll need to configure your MCP client to communi
       "command": "python3",
       "args": [
         "-m", "ydb_mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local"
+        "--ydb-endpoint", "grpc://localhost:2136",
+        "--ydb-database", "/local"
       ]
     }
   }
@@ -92,7 +95,8 @@ To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-logi
       "command": "uvx",
       "args": [
         "ydb-mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-endpoint", "grpc://localhost:2136",
+        "--ydb-database", "/local",
         "--ydb-auth-mode", "login-password",
         "--ydb-login", "<your-username>",
         "--ydb-password", "<your-password>"
@@ -113,7 +117,8 @@ To use access token authentication, specify the `--ydb-auth-mode` and `--ydb-acc
       "command": "uvx",
       "args": [
         "ydb-mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-endpoint", "grpc://localhost:2136",
+        "--ydb-database", "/local",
         "--ydb-auth-mode", "access-token",
         "--ydb-access-token", "qwerty123"
       ]
@@ -133,7 +138,8 @@ To use service account authentication, specify the `--ydb-auth-mode` and `--ydb-
       "command": "uvx",
       "args": [
         "ydb-mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-endpoint", "grpc://localhost:2136",
+        "--ydb-database", "/local",
         "--ydb-auth-mode", "service-account",
         "--ydb-sa-key-file", "~/sa_key.json"
       ]
