@@ -31,27 +31,6 @@
 }
 ```
 
-#### Example: Using Login/Password Authentication
-
-To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-login`, and `--ydb-password` arguments:
-
-```json
-{
-  "mcpServers": {
-    "ydb": {
-      "command": "uvx",
-      "args": [
-        "ydb-mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local",
-        "--ydb-auth-mode", "login-password",
-        "--ydb-login", "<your-username>",
-        "--ydb-password", "<your-password>"
-      ]
-    }
-  }
-}
-```
-
 ### Via pipx
 
 [pipx](https://pipx.pypa.io/stable/) allows you to run various applications from PyPI without explicitly installing each one. However, it must be [installed](https://pipx.pypa.io/stable/#install-pipx) first. Below are examples of how to configure YDB MCP using `pipx`.
@@ -66,27 +45,6 @@ To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-logi
       "args": [
         "run", "ydb-mcp",
         "--ydb-endpoint", "grpc://localhost:2136/local"
-      ]
-    }
-  }
-}
-```
-
-#### Example: Using Login/Password Authentication
-
-To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-login`, and `--ydb-password` arguments:
-
-```json
-{
-  "mcpServers": {
-    "ydb": {
-      "command": "pipx",
-      "args": [
-        "run", "ydb-mcp",
-        "--ydb-endpoint", "grpc://localhost:2136/local",
-        "--ydb-auth-mode", "login-password",
-        "--ydb-login", "<your-username>",
-        "--ydb-password", "<your-password>"
       ]
     }
   }
@@ -119,7 +77,11 @@ To get started with YDB MCP, you'll need to configure your MCP client to communi
 }
 ```
 
-#### Example: Using Login/Password Authentication
+### Authentication
+
+Regardless of the usage method (`uvx`, `pipx` or `pip`), you can configure authentication for your YDB installation. To do this, pass special command line arguments.
+
+#### Using Login/Password Authentication
 
 To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-login`, and `--ydb-password` arguments:
 
@@ -127,13 +89,53 @@ To use login/password authentication, specify the `--ydb-auth-mode`, `--ydb-logi
 {
   "mcpServers": {
     "ydb": {
-      "command": "python3",
+      "command": "uvx",
       "args": [
-        "-m", "ydb_mcp",
+        "ydb-mcp",
         "--ydb-endpoint", "grpc://localhost:2136/local",
         "--ydb-auth-mode", "login-password",
         "--ydb-login", "<your-username>",
         "--ydb-password", "<your-password>"
+      ]
+    }
+  }
+}
+```
+
+#### Using Access Token Authentication
+
+To use access token authentication, specify the `--ydb-auth-mode` and `--ydb-access-token` arguments:
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "uvx",
+      "args": [
+        "ydb-mcp",
+        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-auth-mode", "access-token",
+        "--ydb-access-token", "qwerty123"
+      ]
+    }
+  }
+}
+```
+
+#### Using Service Account Authentication
+
+To use service account authentication, specify the `--ydb-auth-mode` and `--ydb-sa-key-file` arguments:
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "uvx",
+      "args": [
+        "ydb-mcp",
+        "--ydb-endpoint", "grpc://localhost:2136/local",
+        "--ydb-auth-mode", "service-account",
+        "--ydb-sa-key-file", "~/sa_key.json"
       ]
     }
   }
