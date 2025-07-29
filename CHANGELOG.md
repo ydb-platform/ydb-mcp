@@ -1,3 +1,5 @@
+* Fix README instructions
+
 ## 0.1.3 ##
 * Fix auth choices
 
