@@ -1,3 +1,5 @@
+* Fix auth choices
+
 ## 0.1.2 ##
 * Add several auth methods
 

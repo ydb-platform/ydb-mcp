@@ -46,8 +46,20 @@ def parse_args():
         "--ydb-auth-mode",
         type=str,
         default=os.environ.get("YDB_AUTH_MODE"),
-        choices=["anonymous", "login-password"],
+        choices=["anonymous", "login-password", "access-token", "service-account"],
         help="YDB authentication mode (overrides YDB_AUTH_MODE env var)",
+    )
+    parser.add_argument(
+        "--ydb-access-token",
+        type=str,
+        default=os.environ.get("YDB_ACCESS_TOKEN"),
+        help="YDB access token (overrides YDB_ACCESS_TOKEN env var)",
+    )
+    parser.add_argument(
+        "--ydb-sa-key-file",
+        type=str,
+        default=os.environ.get("YDB_SA_KEY_FILE"),
+        help="YDB service account key file (overrides YDB_SA_KEY_FILE env var)",
     )
 
     parser.add_argument(
