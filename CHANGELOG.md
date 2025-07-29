@@ -1,3 +1,5 @@
+* Add several auth methods
+
 ## 0.1.1 ##
 * Update package
 
