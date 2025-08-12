@@ -1,3 +1,4 @@
+## 0.1.5 ##
 * Fix error outputSchema defined but no structured output returned
 
 ## 0.1.4 ##

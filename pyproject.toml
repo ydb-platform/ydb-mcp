@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ydb-mcp"
-version = "0.1.4"  # AUTOVERSION
+version = "0.1.5"  # AUTOVERSION
 description = "Model Context Protocol server for YDB DBMS"
 readme = "README.md"
 authors = [
