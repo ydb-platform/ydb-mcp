@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/ydb-platform-ydb-mcp-badge.png)](https://mseep.ai/app/ydb-platform-ydb-mcp)
+
 # YDB MCP
 ---
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/ydb-platform/ydb-mcp/blob/main/LICENSE)
