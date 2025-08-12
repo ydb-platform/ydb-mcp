@@ -540,7 +540,10 @@ class YDBMCPServer(FastMCP):
                 spec["handler"],
                 name=spec["name"],
                 description=spec["description"],
-                structured_output=False,          # Structured output is temporarily disabled until proper schema definitions are implemented. See https://github.com/ydb-platform/ydb-mcp/issues/12 for details.
+
+                # Structured output is temporarily disabled until proper schema definitions are implemented.
+                # See https://github.com/ydb-platform/ydb-mcp/issues/12 for details.
+                structured_output=False,
             )
 
             # Also register with our tool manager
