@@ -1,3 +1,4 @@
+## 0.1.6 ##
 * Add explain_query and explain_query_with_params tools
 
 ## 0.1.5 ##
