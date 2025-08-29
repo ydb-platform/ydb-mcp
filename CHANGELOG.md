@@ -1,5 +1,8 @@
 * Add explain_query and explain_query_with_params tools
 
+## 0.1.5 ##
+* Fix error outputSchema defined but no structured output returned
+
 ## 0.1.4 ##
 * Fix README instructions
 
