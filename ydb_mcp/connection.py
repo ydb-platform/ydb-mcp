@@ -86,6 +86,7 @@ class YDBConnection:
                 endpoint=endpoint,
                 database=database,
                 credentials=ydb.credentials.AnonymousCredentials(),
+                disable_discovery=True,
             )
 
             # Wait for driver to be ready with timeout
