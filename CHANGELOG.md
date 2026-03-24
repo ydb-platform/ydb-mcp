@@ -1,3 +1,5 @@
+* Pass lib version to sdk grpc header
+
 ## 0.1.6 ##
 * Add explain_query and explain_query_with_params tools
 
