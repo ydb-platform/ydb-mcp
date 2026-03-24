@@ -1,3 +1,4 @@
+## 0.1.7 ##
 * Pass lib version to sdk grpc header
 
 ## 0.1.6 ##
