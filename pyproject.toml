@@ -21,7 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "ydb>=3.21.0",
+    "ydb>=3.26.7",
     "mcp>=1.6.0",
 ]
 

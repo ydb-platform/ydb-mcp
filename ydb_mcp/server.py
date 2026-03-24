@@ -17,6 +17,8 @@ from ydb.aio import QuerySessionPool
 from ydb_mcp.connection import YDBConnection
 from ydb_mcp.tool_manager import ToolManager
 
+from .version import VERSION as YDB_MCP_VERSION
+
 logger = logging.getLogger(__name__)
 
 # Authentication mode constants
@@ -236,6 +238,7 @@ class YDBMCPServer(FastMCP):
                 database=database,
                 credentials=credentials_factory(),
                 root_certificates=self.root_certificates,
+                _additional_sdk_headers=("ydb-mcp/" + YDB_MCP_VERSION,),
             )
 
             # Create and initialize the driver
