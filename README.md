@@ -161,6 +161,15 @@ YDB MCP provides the following tools for interacting with YDB databases:
     - `sql`: SQL query string with parameter placeholders
     - `params`: JSON string containing parameter values
 
+- `ydb_explain_query`: Explain a SQL query (returns the execution plan)
+  - Parameters:
+    - `sql`: SQL query string to explain
+
+- `ydb_explain_query_with_params`: Explain a parameterized SQL query
+  - Parameters:
+    - `sql`: SQL query string with parameter placeholders
+    - `params`: JSON string containing parameter values
+
 - `ydb_list_directory`: List directory contents in YDB
   - Parameters:
     - `path`: YDB directory path to list
@@ -170,6 +179,102 @@ YDB MCP provides the following tools for interacting with YDB databases:
     - `path`: YDB path to describe
 
 - `ydb_status`: Get the current status of the YDB connection
+
+
+## Building Custom MCP Servers
+
+`YDBMCPServer` is designed to be subclassed. You can add your own tools on top of an established YDB connection and, optionally, disable the built-in generic tools to expose only the queries your application needs.
+
+### Why build a custom server?
+
+- **Security** — restrict the LLM to a fixed set of read-only queries instead of exposing arbitrary SQL execution.
+- **Domain specificity** — give the model tools that match your business logic rather than raw database primitives.
+- **Simplicity** — fewer tools means less ambiguity for the model.
+
+### Available methods
+
+Override or call these in your subclass:
+
+| Method | Description |
+|--------|-------------|
+| `await self.execute(sql, params=None)` | Run a SQL query. Returns `list[dict]`, each dict has `"columns"` and `"rows"`. |
+| `await self.explain(sql, params=None)` | Return the query execution plan as a `dict`. |
+| `await self.list_directory(path)` | List a YDB directory. Returns `dict` with `"path"` and `"items"`. |
+| `await self.describe_path(path)` | Describe a YDB path (table schema, directory, etc.). Returns a `dict`. |
+
+The `params` argument is a plain `dict`. Keys without a `$` prefix get it added automatically. To specify an explicit YDB type, use a `(value, "TypeName")` tuple — e.g. `{"id": (42, "Int64")}`.
+
+### Controlling generic tools
+
+Use the `generic_tools` class attribute to control which built-in tools are registered:
+
+| Value | Effect |
+|---|---|
+| `set(YDBGenericTool)` | All built-in tools (default) |
+| `set()` | No built-in tools — only your own |
+| `{YDBGenericTool.QUERY, YDBGenericTool.STATUS}` | Only the listed tools |
+
+`YDBGenericTool` is a string enum — available values: `QUERY`, `QUERY_WITH_PARAMS`, `EXPLAIN`, `EXPLAIN_WITH_PARAMS`, `STATUS`, `LIST_DIRECTORY`, `DESCRIBE_PATH`.
+
+### Example
+
+```python
+# my_server.py
+from ydb_mcp import YDBMCPServer, YDBGenericTool, serialize_ydb_response
+
+
+class OrdersServer(YDBMCPServer):
+    """Minimal read-only MCP server for the orders service."""
+
+    generic_tools = {YDBGenericTool.STATUS}  # keep status check for diagnostics
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        @self.tool()
+        async def get_order(order_id: str) -> str:
+            """Fetch a single order by ID."""
+            rows = await self.execute(
+                "SELECT * FROM orders WHERE id = $id",
+                {"id": order_id},
+            )
+            return serialize_ydb_response(rows)
+
+        @self.tool()
+        async def list_recent_orders(limit: int = 10) -> str:
+            """Return the most recent orders."""
+            rows = await self.execute(
+                "SELECT * FROM orders ORDER BY created_at DESC LIMIT $limit",
+                {"limit": limit},
+            )
+            return serialize_ydb_response(rows)
+
+
+if __name__ == "__main__":
+    OrdersServer(
+        endpoint="grpc://localhost:2136",
+        database="/local",
+    ).run()
+```
+
+Run it directly:
+
+```bash
+python my_server.py
+```
+
+Or wire it up as an MCP server in your client config:
+
+```json
+{
+  "mcpServers": {
+    "orders": {
+      "command": "python",
+      "args": ["my_server.py"]
+    }
+  }
+}
+```
 
 ## Development
 

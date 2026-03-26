@@ -1,3 +1,5 @@
+* Make MCP server extensible via subclassing (`YDBMCPServer` now extends `FastMCP`)
+
 ## 0.1.7 ##
 * Pass lib version to sdk grpc header
 

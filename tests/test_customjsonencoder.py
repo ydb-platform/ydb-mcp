@@ -5,7 +5,7 @@ import datetime
 import decimal
 import json
 
-from ydb_mcp.server import CustomJSONEncoder
+from ydb_mcp.serialization import CustomJSONEncoder
 
 
 def test_datetime_serialization():
