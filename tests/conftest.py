@@ -1,47 +1,33 @@
-"""Pytest configuration for testing YDB MCP server."""
+"""Pytest configuration for YDB MCP tests."""
 
-import os
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 
 @pytest.fixture
-def mock_ydb_driver():
-    """Mock YDB driver."""
-    with patch("ydb.aio.Driver") as mock_driver_class:
-        # Setup the mock driver instance
-        mock_driver = AsyncMock()
-        mock_driver_class.return_value = mock_driver
-
-        # Mock the wait method
-        mock_driver.wait = AsyncMock()
-
-        yield mock_driver
+def mock_pool():
+    pool = AsyncMock()
+    pool.execute_with_retries = AsyncMock(return_value=[])
+    pool.explain_with_retries = AsyncMock(return_value={})
+    return pool
 
 
 @pytest.fixture
-def mock_ydb_pool():
-    """Mock YDB session pool."""
-    with patch("ydb.aio.QuerySessionPool") as mock_pool_class:
-        # Setup the mock pool instance
-        mock_pool = AsyncMock()
-        mock_pool_class.return_value = mock_pool
-
-        # Mock the execute_with_retries method
-        mock_pool.execute_with_retries = AsyncMock()
-
-        yield mock_pool
+def mock_driver(mock_pool):
+    driver = MagicMock()
+    driver.discovery_debug_details.return_value = "Resolved endpoints: grpc://localhost:2136"
+    driver.scheme_client.list_directory = AsyncMock()
+    driver.scheme_client.describe_path = AsyncMock()
+    return driver
 
 
 @pytest.fixture
-def mock_env_vars():
-    """Mock environment variables."""
-    env_vars = {
-        "YDB_ENDPOINT": "mock-endpoint",
-        "YDB_DATABASE": "mock-database",
-        "YDB_ANONYMOUS_CREDENTIALS": "1",
-    }
+def server(mock_driver, mock_pool):
+    """YDBMCPServer with mocked connection (no real YDB needed)."""
+    from ydb_mcp.server import YDBMCPServer
 
-    with patch.dict(os.environ, env_vars):
-        yield env_vars
+    s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+    s._driver = mock_driver
+    s._pool = mock_pool
+    return s
