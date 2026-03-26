@@ -1,3 +1,4 @@
+## 0.2.0 ##
 * Make MCP server extensible via subclassing (`YDBMCPServer` now extends `FastMCP`)
 
 ## 0.1.7 ##
