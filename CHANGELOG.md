@@ -1,3 +1,5 @@
+* Ability to disable discovery in YDB driver
+
 ## 0.2.0 ##
 * Make MCP server extensible via subclassing (`YDBMCPServer` now extends `FastMCP`)
 
