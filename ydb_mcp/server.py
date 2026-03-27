@@ -82,6 +82,7 @@ class YDBMCPServer(FastMCP):
         access_token: str | None = None,
         sa_key_file: str | None = None,
         root_certificates: str | None = None,
+        disable_discovery: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__("YDB MCP Server", **kwargs)
@@ -105,6 +106,7 @@ class YDBMCPServer(FastMCP):
         self.access_token = access_token
         self.sa_key_file = sa_key_file
         self.root_certificates = root_certificates
+        self.disable_discovery = disable_discovery
 
         self._driver: ydb.aio.Driver | None = None
         self._pool: ydb.aio.QuerySessionPool | None = None
@@ -137,6 +139,7 @@ class YDBMCPServer(FastMCP):
                 database=self.database,
                 credentials=self._build_credentials(),
                 root_certificates=self.root_certificates,
+                disable_discovery=self.disable_discovery,
                 _additional_sdk_headers=(f"ydb-mcp/{VERSION}",),
             )
             driver = ydb.aio.Driver(config)

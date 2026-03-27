@@ -1,7 +1,8 @@
 """Unit tests for YDBMCPServer."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -140,6 +141,41 @@ class TestYDBMCPServerInit:
     def test_service_account_missing(self):
         with pytest.raises(ValueError, match="service-account"):
             YDBMCPServer(auth_mode="service-account")
+
+    def test_disable_discovery_default_false(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+        assert s.disable_discovery is False
+
+    def test_disable_discovery_true(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", disable_discovery=True)
+        assert s.disable_discovery is True
+
+
+# ---------------------------------------------------------------------------
+# __main__ CLI argument parsing
+# ---------------------------------------------------------------------------
+
+
+class TestMain:
+    def _parse(self, argv):
+        """Run main() with given argv, capturing the YDBMCPServer constructor call."""
+        from ydb_mcp.__main__ import main
+
+        with patch("ydb_mcp.__main__.YDBMCPServer") as mock_cls:
+            mock_cls.return_value.run = MagicMock()
+            with patch.object(sys, "argv", ["ydb-mcp"] + argv):
+                main()
+        return mock_cls.call_args.kwargs
+
+    def test_disable_discovery_not_set_by_default(self):
+        kwargs = self._parse(["--ydb-endpoint", "grpc://localhost:2136", "--ydb-database", "/local"])
+        assert kwargs["disable_discovery"] is False
+
+    def test_disable_discovery_flag(self):
+        kwargs = self._parse(
+            ["--ydb-endpoint", "grpc://localhost:2136", "--ydb-database", "/local", "--ydb-disable-discovery"]
+        )
+        assert kwargs["disable_discovery"] is True
 
 
 # ---------------------------------------------------------------------------

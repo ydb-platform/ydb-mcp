@@ -56,6 +56,12 @@ def main() -> None:
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
     )
+
+    parser.add_argument(
+        "--ydb-disable-discovery",
+        action="store_true",
+        help="Disable discovery of endpoints",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -73,6 +79,7 @@ def main() -> None:
             access_token=args.ydb_access_token,
             sa_key_file=args.ydb_sa_key_file,
             root_certificates=args.ydb_root_certificates,
+            disable_discovery=args.ydb_disable_discovery,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
