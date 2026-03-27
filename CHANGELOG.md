@@ -1,3 +1,4 @@
+## 0.2.1 ##
 * Ability to disable discovery in YDB driver
 
 ## 0.2.0 ##
