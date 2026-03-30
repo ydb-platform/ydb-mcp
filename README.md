@@ -148,6 +148,10 @@ To use service account authentication, specify the `--ydb-auth-mode` and `--ydb-
 }
 ```
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/ydb-ydb-mcp).
+
 ## Available Tools
 
 YDB MCP provides the following tools for interacting with YDB databases:
