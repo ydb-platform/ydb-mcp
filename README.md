@@ -129,6 +129,12 @@ To use access token authentication, specify the `--ydb-auth-mode` and `--ydb-acc
 
 #### Using Service Account Authentication
 
+Service account authentication requires the [`yandexcloud`](https://pypi.org/project/yandexcloud/) package, which is **not** installed by default. Make sure it is available in the environment that runs YDB MCP:
+
+- **uvx**: add it on the fly with `--with yandexcloud` (passed before `ydb-mcp`).
+- **pipx**: install YDB MCP with the extra package using `pipx install ydb-mcp` followed by `pipx inject ydb-mcp yandexcloud`.
+- **pip**: install it alongside YDB MCP with `pip install ydb-mcp yandexcloud`.
+
 To use service account authentication, specify the `--ydb-auth-mode` and `--ydb-sa-key-file` arguments:
 
 ```json
@@ -137,6 +143,7 @@ To use service account authentication, specify the `--ydb-auth-mode` and `--ydb-
     "ydb": {
       "command": "uvx",
       "args": [
+        "--with", "yandexcloud",
         "ydb-mcp",
         "--ydb-endpoint", "grpc://localhost:2136",
         "--ydb-database", "/local",
