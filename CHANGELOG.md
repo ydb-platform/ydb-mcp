@@ -1,4 +1,5 @@
 * Fix `--ydb-root-certificates`: load PEM contents from the file instead of passing its path to the SDK
+* Require `mcp<2`: the 2.x SDK renamed `FastMCP` to `MCPServer`, so fresh installs failed on import
 
 ## 0.2.1 ##
 * Ability to disable discovery in YDB driver

@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "ydb>=3.26.7",
-    "mcp>=1.6.0",
+    "mcp>=1.6.0,<2",  # 2.x renamed FastMCP to MCPServer and changed the API
 ]
 
 [project.optional-dependencies]
