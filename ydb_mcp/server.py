@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
 
 import ydb
@@ -29,6 +30,26 @@ _ENTRY_TYPE_MAP = {
     11: "EXTERNAL_DATA_SOURCE",
     12: "EXTERNAL_TABLE",
 }
+
+
+def _load_root_certificates(root_certificates: str | bytes | os.PathLike | None) -> bytes | None:
+    """Read PEM-encoded root CA certificates for ``ydb.DriverConfig``.
+
+    The CLI option and the ``YDB_ROOT_CERTIFICATES`` env var carry a path to a PEM file,
+    while the SDK expects the certificate contents as bytes. Contents can also be passed
+    directly as bytes.
+    """
+    if root_certificates is None or isinstance(root_certificates, bytes):
+        return root_certificates
+
+    path = Path(root_certificates).expanduser()
+    try:
+        pem = path.read_bytes()
+    except OSError as e:
+        raise ValueError(f"Cannot read root CA certificate file '{path}': {e.strerror}") from e
+    if not pem.strip():
+        raise ValueError(f"Root CA certificate file '{path}' is empty")
+    return pem
 
 
 class YDBMCPServer(FastMCP):
@@ -81,7 +102,7 @@ class YDBMCPServer(FastMCP):
         password: str | None = None,
         access_token: str | None = None,
         sa_key_file: str | None = None,
-        root_certificates: str | None = None,
+        root_certificates: str | bytes | os.PathLike | None = None,
         disable_discovery: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -105,7 +126,7 @@ class YDBMCPServer(FastMCP):
         self.password = password
         self.access_token = access_token
         self.sa_key_file = sa_key_file
-        self.root_certificates = root_certificates
+        self.root_certificates = _load_root_certificates(root_certificates)
         self.disable_discovery = disable_discovery
 
         self._driver: ydb.aio.Driver | None = None

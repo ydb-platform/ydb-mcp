@@ -49,7 +49,7 @@ def main() -> None:
     parser.add_argument(
         "--ydb-root-certificates",
         default=os.environ.get("YDB_ROOT_CERTIFICATES"),
-        help="Path to root CA certificate file for TLS (overrides YDB_ROOT_CERTIFICATES env var)",
+        help="Path to a PEM file with root CA certificates for TLS (overrides YDB_ROOT_CERTIFICATES env var)",
     )
     parser.add_argument(
         "--log-level",

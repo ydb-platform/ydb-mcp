@@ -1,3 +1,5 @@
+* Fix `--ydb-root-certificates`: load PEM contents from the file instead of passing its path to the SDK
+
 ## 0.2.1 ##
 * Ability to disable discovery in YDB driver
 

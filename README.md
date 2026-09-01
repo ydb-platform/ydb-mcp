@@ -155,6 +155,26 @@ To use service account authentication, specify the `--ydb-auth-mode` and `--ydb-
 }
 ```
 
+### TLS Connections
+
+Use a `grpcs://` endpoint to connect over TLS. If the cluster certificate is issued by a private CA, pass a path to the PEM file with its root certificates via `--ydb-root-certificates`; otherwise the system trust store is used:
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "uvx",
+      "args": [
+        "ydb-mcp",
+        "--ydb-endpoint", "grpcs://localhost:2135",
+        "--ydb-database", "/local",
+        "--ydb-root-certificates", "~/ydb_ca.pem"
+      ]
+    }
+  }
+}
+```
+
 ## Available Tools
 
 YDB MCP provides the following tools for interacting with YDB databases:
