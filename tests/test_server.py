@@ -152,6 +152,78 @@ class TestYDBMCPServerInit:
 
 
 # ---------------------------------------------------------------------------
+# Root CA certificates
+# ---------------------------------------------------------------------------
+
+PEM = b"-----BEGIN CERTIFICATE-----\nc2VjcmV0\n-----END CERTIFICATE-----\n"
+
+
+class TestRootCertificates:
+    def _server(self, root_certificates):
+        return YDBMCPServer(
+            endpoint="grpcs://localhost:2135",
+            database="/local",
+            root_certificates=root_certificates,
+        )
+
+    def test_default_none(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+        assert s.root_certificates is None
+
+    def test_path_is_read_as_bytes(self, tmp_path):
+        cert = tmp_path / "ca.pem"
+        cert.write_bytes(PEM)
+        assert self._server(str(cert)).root_certificates == PEM
+
+    def test_path_object(self, tmp_path):
+        cert = tmp_path / "ca.pem"
+        cert.write_bytes(PEM)
+        assert self._server(cert).root_certificates == PEM
+
+    def test_user_home_is_expanded(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        (tmp_path / "ca.pem").write_bytes(PEM)
+        assert self._server("~/ca.pem").root_certificates == PEM
+
+    def test_bytes_passed_through(self):
+        assert self._server(PEM).root_certificates == PEM
+
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_blank_option_means_no_certificates(self, blank):
+        assert self._server(blank).root_certificates is None
+
+    def test_empty_bytes(self):
+        with pytest.raises(ValueError, match="Root CA certificates are empty"):
+            self._server(b"")
+
+    def test_missing_file(self, tmp_path):
+        with pytest.raises(ValueError, match="Cannot read root CA certificate file"):
+            self._server(str(tmp_path / "nope.pem"))
+
+    def test_empty_file(self, tmp_path):
+        cert = tmp_path / "ca.pem"
+        cert.write_bytes(b"\n")
+        with pytest.raises(ValueError, match="is empty"):
+            self._server(str(cert))
+
+    async def test_driver_config_gets_certificate_bytes(self, tmp_path):
+        cert = tmp_path / "ca.pem"
+        cert.write_bytes(PEM)
+        s = self._server(str(cert))
+
+        with (
+            patch("ydb.DriverConfig") as driver_config,
+            patch("ydb.aio.Driver") as driver_cls,
+            patch("ydb.aio.QuerySessionPool"),
+        ):
+            driver_cls.return_value.wait = AsyncMock()
+            await s._ensure_connected()
+
+        assert driver_config.call_args.kwargs["root_certificates"] == PEM
+
+
+# ---------------------------------------------------------------------------
 # __main__ CLI argument parsing
 # ---------------------------------------------------------------------------
 
@@ -176,6 +248,20 @@ class TestMain:
             ["--ydb-endpoint", "grpc://localhost:2136", "--ydb-database", "/local", "--ydb-disable-discovery"]
         )
         assert kwargs["disable_discovery"] is True
+
+    def test_root_certificates_path(self):
+        kwargs = self._parse(["--ydb-root-certificates", "/etc/ssl/ca.pem"])
+        assert kwargs["root_certificates"] == "/etc/ssl/ca.pem"
+
+    def test_root_certificates_unreadable_exits(self, tmp_path, capsys):
+        from ydb_mcp.__main__ import main
+
+        argv = ["ydb-mcp", "--ydb-root-certificates", str(tmp_path / "nope.pem")]
+        with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as exc:
+            main()
+
+        assert exc.value.code == 1
+        assert "Cannot read root CA certificate file" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
