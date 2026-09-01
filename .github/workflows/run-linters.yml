@@ -3,7 +3,7 @@ name: Run Linters
 on:
   push:
     branches:
-      - '**'
+      - main
   pull_request:
     branches:
       - '**'
