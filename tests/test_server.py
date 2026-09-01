@@ -189,6 +189,14 @@ class TestRootCertificates:
     def test_bytes_passed_through(self):
         assert self._server(PEM).root_certificates == PEM
 
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_blank_option_means_no_certificates(self, blank):
+        assert self._server(blank).root_certificates is None
+
+    def test_empty_bytes(self):
+        with pytest.raises(ValueError, match="Root CA certificates are empty"):
+            self._server(b"")
+
     def test_missing_file(self, tmp_path):
         with pytest.raises(ValueError, match="Cannot read root CA certificate file"):
             self._server(str(tmp_path / "nope.pem"))

@@ -39,14 +39,20 @@ def _load_root_certificates(root_certificates: str | bytes | os.PathLike | None)
     while the SDK expects the certificate contents as bytes. Contents can also be passed
     directly as bytes.
     """
-    if root_certificates is None or isinstance(root_certificates, bytes):
+    if root_certificates is None:
+        return None
+    if isinstance(root_certificates, bytes):
+        if not root_certificates.strip():
+            raise ValueError("Root CA certificates are empty")
         return root_certificates
+    if isinstance(root_certificates, str) and not root_certificates.strip():
+        return None  # option left blank, e.g. an empty YDB_ROOT_CERTIFICATES env var
 
     path = Path(root_certificates).expanduser()
     try:
         pem = path.read_bytes()
     except OSError as e:
-        raise ValueError(f"Cannot read root CA certificate file '{path}': {e.strerror}") from e
+        raise ValueError(f"Cannot read root CA certificate file '{path}': {e.strerror or e}") from e
     if not pem.strip():
         raise ValueError(f"Root CA certificate file '{path}' is empty")
     return pem
