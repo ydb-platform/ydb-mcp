@@ -16,22 +16,6 @@ from .version import VERSION
 
 _AUTH_MODES = frozenset({"anonymous", "login-password", "access-token", "service-account"})
 
-_ENTRY_TYPE_MAP = {
-    1: "DIRECTORY",
-    2: "TABLE",
-    3: "PERS_QUEUE",
-    4: "DATABASE",
-    5: "RTMR_VOLUME",
-    6: "BLOCK_STORE_VOLUME",
-    7: "COORDINATION",
-    8: "SEQUENCE",
-    9: "REPLICATION",
-    10: "TOPIC",
-    11: "EXTERNAL_DATA_SOURCE",
-    12: "EXTERNAL_TABLE",
-}
-
-
 def _load_root_certificates(root_certificates: str | bytes | os.PathLike | None) -> bytes | None:
     """Read PEM-encoded root CA certificates for ``ydb.DriverConfig``.
 
@@ -217,9 +201,10 @@ class YDBMCPServer(FastMCP):
         response = await self._driver.scheme_client.list_directory(path)
         items = []
         for entry in response.children or []:
+            entry_type = ydb.SchemeEntryType(entry.type)
             item: dict[str, Any] = {
                 "name": entry.name,
-                "type": _ENTRY_TYPE_MAP.get(entry.type, str(entry.type)),
+                "type": entry_type.name,
                 "owner": entry.owner,
             }
             if getattr(entry, "permissions", None):
@@ -240,12 +225,12 @@ class YDBMCPServer(FastMCP):
         assert self._driver is not None
         response = await self._driver.scheme_client.describe_path(path)
         if response is None:
-            return {"error": f"Path '{path}' not found"}
+            raise LookupError(f"Path '{path}' not found")
 
-        entry_type = _ENTRY_TYPE_MAP.get(response.type, str(response.type))
+        entry_type = ydb.SchemeEntryType(response.type)
         result: dict[str, Any] = {
             "path": path,
-            "type": entry_type,
+            "type": entry_type.name,
             "name": response.name,
             "owner": response.owner,
         }
@@ -254,7 +239,7 @@ class YDBMCPServer(FastMCP):
                 {"subject": p.subject, "permission_names": list(p.permission_names)}
                 for p in response.permissions
             ]
-        if entry_type == "TABLE":
+        if ydb.SchemeEntryType.is_any_table(entry_type):
             result["table"] = await self._describe_table(path)
         return result
 
