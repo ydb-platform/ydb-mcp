@@ -8,6 +8,7 @@ import time
 from urllib.parse import urlparse
 
 import pytest
+from mcp.types import CallToolRequest, CallToolRequestParams
 
 from tests.docker_utils import start_ydb_container, stop_container, wait_for_port
 from ydb_mcp.server import YDBMCPServer
@@ -60,12 +61,14 @@ async def server(ydb_server):
 
 
 async def call_tool(server: YDBMCPServer, tool_name: str, **params) -> dict:
-    """Call a registered MCP tool and return the parsed JSON result.
-
-    Raises ``KeyError`` if *tool_name* is not registered on *server*.
-    """
-    tools = {t.name: t for t in server._tool_manager.list_tools()}
-    result = await tools[tool_name].fn(**params)
-    if isinstance(result, list) and result and hasattr(result[0], "text"):
-        return json.loads(result[0].text)
-    return result
+    """Call a registered tool through MCP and return its parsed result."""
+    handler = server._mcp_server.request_handlers[CallToolRequest]
+    request = CallToolRequest(
+        method="tools/call",
+        params=CallToolRequestParams(name=tool_name, arguments=params),
+    )
+    result = (await handler(request)).root
+    text = result.content[0].text
+    if result.isError:
+        return {"error": text}
+    return json.loads(text)

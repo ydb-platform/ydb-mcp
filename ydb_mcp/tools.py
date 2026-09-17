@@ -1,6 +1,5 @@
 """Built-in generic MCP tools for YDB."""
 
-import json
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -33,33 +32,21 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
 
     async def ydb_query(sql: str) -> list[TextContent]:
         """Run a SQL query against YDB database."""
-        try:
-            return [TextContent(type="text", text=serialize_ydb_response({"result_sets": await server.execute(sql)}))]
-        except Exception as e:
-            return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        return [TextContent(type="text", text=serialize_ydb_response({"result_sets": await server.execute(sql)}))]
 
     async def ydb_query_with_params(sql: str, params: str | dict) -> list[TextContent]:
         """Run a parameterized SQL query with JSON parameters."""
-        try:
-            result_sets = await server.execute(sql, _parse_params_str(params))
-            return [TextContent(type="text", text=serialize_ydb_response({"result_sets": result_sets}))]
-        except Exception as e:
-            return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        result_sets = await server.execute(sql, _parse_params_str(params))
+        return [TextContent(type="text", text=serialize_ydb_response({"result_sets": result_sets}))]
 
     async def ydb_explain_query(sql: str) -> list[TextContent]:
         """Explain a SQL query against YDB."""
-        try:
-            return [TextContent(type="text", text=serialize_ydb_response(await server.explain(sql)))]
-        except Exception as e:
-            return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        return [TextContent(type="text", text=serialize_ydb_response(await server.explain(sql)))]
 
     async def ydb_explain_query_with_params(sql: str, params: str | dict) -> list[TextContent]:
         """Explain a parameterized SQL query against YDB."""
-        try:
-            result = await server.explain(sql, _parse_params_str(params))
-            return [TextContent(type="text", text=serialize_ydb_response(result))]
-        except Exception as e:
-            return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        result = await server.explain(sql, _parse_params_str(params))
+        return [TextContent(type="text", text=serialize_ydb_response(result))]
 
     async def ydb_status() -> list[TextContent]:
         """Get the current YDB connection status."""
@@ -72,12 +59,8 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
         try:
             await server._ensure_connected()
             assert server._driver is not None
-            details = server._driver.discovery_debug_details()
-            if details.startswith("Resolved endpoints"):
-                status["ydb_connection"] = "connected"
-            else:
-                status["ydb_connection"] = "error"
-                status["error"] = details
+            await server._driver.wait(timeout=5.0)
+            status["ydb_connection"] = "connected"
         except Exception as e:
             status["ydb_connection"] = "error"
             status["error"] = str(e)
@@ -85,17 +68,11 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
 
     async def ydb_list_directory(path: str) -> list[TextContent]:
         """List directory contents in YDB."""
-        try:
-            return [TextContent(type="text", text=serialize_ydb_response(await server.list_directory(path)))]
-        except Exception as e:
-            return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        return [TextContent(type="text", text=serialize_ydb_response(await server.list_directory(path)))]
 
     async def ydb_describe_path(path: str) -> list[TextContent]:
         """Get detailed information about a YDB path (table, directory, etc.)."""
-        try:
-            return [TextContent(type="text", text=serialize_ydb_response(await server.describe_path(path)))]
-        except Exception as e:
-            return [TextContent(type="text", text=json.dumps({"error": str(e)}, indent=2))]
+        return [TextContent(type="text", text=serialize_ydb_response(await server.describe_path(path)))]
 
     for tool, fn, description in [
         (YDBGenericTool.QUERY, ydb_query, "Run a SQL query against YDB database"),

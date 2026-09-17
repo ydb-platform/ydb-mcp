@@ -16,7 +16,7 @@ def mock_pool():
 @pytest.fixture
 def mock_driver(mock_pool):
     driver = MagicMock()
-    driver.discovery_debug_details.return_value = "Resolved endpoints: grpc://localhost:2136"
+    driver.wait = AsyncMock()
     driver.scheme_client.list_directory = AsyncMock()
     driver.scheme_client.describe_path = AsyncMock()
     return driver

@@ -5,6 +5,8 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import ydb
+from mcp.types import CallToolRequest, CallToolRequestParams
 
 from ydb_mcp.params import _build_ydb_params, _parse_params_str
 from ydb_mcp.serialization import _process_result_set, _stringify_keys
@@ -365,7 +367,7 @@ class TestListDirectory:
     async def test_basic(self, server, mock_driver):
         entry = MagicMock()
         entry.name = "my_table"
-        entry.type = 2
+        entry.type = ydb.SchemeEntryType.TABLE
         entry.owner = "root"
         entry.permissions = []
         response = MagicMock()
@@ -379,6 +381,21 @@ class TestListDirectory:
         assert result["items"][0]["name"] == "my_table"
         assert result["items"][0]["type"] == "TABLE"
 
+    @pytest.mark.parametrize("entry_type", list(ydb.SchemeEntryType))
+    async def test_entry_type_name_comes_from_sdk(self, server, mock_driver, entry_type):
+        entry = MagicMock()
+        entry.name = "entry"
+        entry.type = entry_type
+        entry.owner = "root"
+        entry.permissions = []
+        response = MagicMock()
+        response.children = [entry]
+        mock_driver.scheme_client.list_directory.return_value = response
+
+        result = await server.list_directory("/local")
+
+        assert result["items"][0]["type"] == entry_type.name
+
     async def test_empty_directory(self, server, mock_driver):
         response = MagicMock()
         response.children = []
@@ -391,7 +408,7 @@ class TestListDirectory:
         def make_entry(name):
             e = MagicMock()
             e.name = name
-            e.type = 1
+            e.type = ydb.SchemeEntryType.DIRECTORY
             e.owner = "root"
             e.permissions = []
             return e
@@ -408,7 +425,7 @@ class TestListDirectory:
 class TestDescribePath:
     async def test_directory(self, server, mock_driver):
         response = MagicMock()
-        response.type = "DIRECTORY"
+        response.type = ydb.SchemeEntryType.DIRECTORY
         response.name = "mydir"
         response.owner = "root"
         response.permissions = []
@@ -423,8 +440,23 @@ class TestDescribePath:
 
     async def test_none_response(self, server, mock_driver):
         mock_driver.scheme_client.describe_path.return_value = None
-        result = await server.describe_path("/local/missing")
-        assert "error" in result
+        with pytest.raises(LookupError, match="not found"):
+            await server.describe_path("/local/missing")
+
+    async def test_column_table_includes_table_details(self, server, mock_driver):
+        response = MagicMock()
+        response.type = ydb.SchemeEntryType.COLUMN_TABLE
+        response.name = "column_table"
+        response.owner = "root"
+        response.permissions = []
+        mock_driver.scheme_client.describe_path.return_value = response
+        server._describe_table = AsyncMock(return_value={"columns": [], "primary_key": [], "indexes": []})
+
+        result = await server.describe_path("/local/column_table")
+
+        assert result["type"] == "COLUMN_TABLE"
+        assert result["table"] == {"columns": [], "primary_key": [], "indexes": []}
+        server._describe_table.assert_awaited_once_with("/local/column_table")
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +473,14 @@ class TestGenericToolHandlers:
         assert name in tools, f"Tool {name!r} not registered"
         return await tools[name].fn(**kwargs)
 
+    async def _call_protocol_tool(self, server, name, **kwargs):
+        handler = server._mcp_server.request_handlers[CallToolRequest]
+        request = CallToolRequest(
+            method="tools/call",
+            params=CallToolRequestParams(name=name, arguments=kwargs),
+        )
+        return (await handler(request)).root
+
     async def test_ydb_query_success(self, server):
         server.execute = AsyncMock(return_value=[{"columns": ["n"], "rows": [[1]]}])
         result = await self._call_tool(server, "ydb_query", sql="SELECT 1")
@@ -448,11 +488,24 @@ class TestGenericToolHandlers:
         data = json.loads(result[0].text)
         assert "result_sets" in data
 
-    async def test_ydb_query_error(self, server):
-        server.execute = AsyncMock(side_effect=RuntimeError("connection failed"))
-        result = await self._call_tool(server, "ydb_query", sql="SELECT 1")
-        data = json.loads(result[0].text)
-        assert "error" in data
+    @pytest.mark.parametrize(
+        ("tool_name", "server_method", "arguments"),
+        [
+            ("ydb_query", "execute", {"sql": "SELECT 1"}),
+            ("ydb_query_with_params", "execute", {"sql": "SELECT $x", "params": {"x": 1}}),
+            ("ydb_explain_query", "explain", {"sql": "SELECT 1"}),
+            ("ydb_explain_query_with_params", "explain", {"sql": "SELECT $x", "params": {"x": 1}}),
+            ("ydb_list_directory", "list_directory", {"path": "/local"}),
+            ("ydb_describe_path", "describe_path", {"path": "/local/t"}),
+        ],
+    )
+    async def test_tool_failure_is_mcp_error(self, server, tool_name, server_method, arguments):
+        setattr(server, server_method, AsyncMock(side_effect=RuntimeError("database unavailable")))
+
+        result = await self._call_protocol_tool(server, tool_name, **arguments)
+
+        assert result.isError is True
+        assert "database unavailable" in result.content[0].text
 
     async def test_ydb_query_with_params(self, server):
         server.execute = AsyncMock(return_value=[])
@@ -460,9 +513,8 @@ class TestGenericToolHandlers:
         server.execute.assert_called_once_with("SELECT $x", {"$x": 1})
 
     async def test_ydb_query_with_params_invalid_json(self, server):
-        result = await self._call_tool(server, "ydb_query_with_params", sql="SELECT $x", params="bad json")
-        data = json.loads(result[0].text)
-        assert "error" in data
+        result = await self._call_protocol_tool(server, "ydb_query_with_params", sql="SELECT $x", params="bad json")
+        assert result.isError is True
 
     async def test_ydb_explain(self, server):
         server.explain = AsyncMock(return_value={"plan": {}})
@@ -471,16 +523,19 @@ class TestGenericToolHandlers:
         assert "plan" in data
 
     async def test_ydb_status_connected(self, server, mock_driver):
-        mock_driver.discovery_debug_details.return_value = "Resolved endpoints: ..."
+        mock_driver.discovery_debug_details.return_value = "Discovery is disabled, using only the initial endpoint"
         result = await self._call_tool(server, "ydb_status")
         data = json.loads(result[0].text)
         assert data["ydb_connection"] == "connected"
+        mock_driver.wait.assert_awaited_once_with(timeout=5.0)
+        mock_driver.discovery_debug_details.assert_not_called()
 
     async def test_ydb_status_error(self, server, mock_driver):
-        mock_driver.discovery_debug_details.return_value = "No endpoints"
+        mock_driver.wait.side_effect = RuntimeError("No endpoints")
         result = await self._call_tool(server, "ydb_status")
         data = json.loads(result[0].text)
         assert data["ydb_connection"] == "error"
+        assert data["error"] == "No endpoints"
 
     async def test_ydb_list_directory(self, server):
         server.list_directory = AsyncMock(return_value={"path": "/local", "items": []})
@@ -493,3 +548,11 @@ class TestGenericToolHandlers:
         result = await self._call_tool(server, "ydb_describe_path", path="/local/t")
         data = json.loads(result[0].text)
         assert data["type"] == "TABLE"
+
+    async def test_missing_path_is_mcp_error(self, server, mock_driver):
+        mock_driver.scheme_client.describe_path.return_value = None
+
+        result = await self._call_protocol_tool(server, "ydb_describe_path", path="/local/missing")
+
+        assert result.isError is True
+        assert "Path '/local/missing' not found" in result.content[0].text
