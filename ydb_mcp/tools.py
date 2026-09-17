@@ -55,6 +55,7 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
             "ydb_endpoint": server.endpoint,
             "ydb_database": server.database,
             "auth_mode": server.auth_mode,
+            "access_mode": server.access_mode,
         }
         try:
             await server._ensure_connected()
@@ -74,9 +75,20 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
         """Get detailed information about a YDB path (table, directory, etc.)."""
         return [TextContent(type="text", text=serialize_ydb_response(await server.describe_path(path)))]
 
+    query_description = (
+        "Run a read-only SQL query against YDB database"
+        if server.access_mode == "read-only"
+        else "Run a SQL query against YDB database"
+    )
+    parameterized_query_description = (
+        "Run a read-only parameterized SQL query with JSON parameters"
+        if server.access_mode == "read-only"
+        else "Run a parameterized SQL query with JSON parameters"
+    )
+
     for tool, fn, description in [
-        (YDBGenericTool.QUERY, ydb_query, "Run a SQL query against YDB database"),
-        (YDBGenericTool.QUERY_WITH_PARAMS, ydb_query_with_params, "Run a parameterized SQL query with JSON parameters"),
+        (YDBGenericTool.QUERY, ydb_query, query_description),
+        (YDBGenericTool.QUERY_WITH_PARAMS, ydb_query_with_params, parameterized_query_description),
         (YDBGenericTool.EXPLAIN, ydb_explain_query, "Explain a SQL query against YDB"),
         (YDBGenericTool.EXPLAIN_WITH_PARAMS, ydb_explain_query_with_params,
          "Explain a parameterized SQL query against YDB"),

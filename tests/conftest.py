@@ -9,6 +9,7 @@ import pytest
 def mock_pool():
     pool = AsyncMock()
     pool.execute_with_retries = AsyncMock(return_value=[])
+    pool.retry_tx_async = AsyncMock(return_value=[])
     pool.explain_with_retries = AsyncMock(return_value={})
     return pool
 

@@ -60,6 +60,14 @@ async def server(ydb_server):
     await s.aclose()
 
 
+@pytest.fixture
+async def read_only_server(ydb_server):
+    """YDBMCPServer that executes queries in read-only transactions."""
+    s = YDBMCPServer(endpoint=YDB_ENDPOINT, database=YDB_DATABASE, access_mode="read-only")
+    yield s
+    await s.aclose()
+
+
 async def call_tool(server: YDBMCPServer, tool_name: str, **params) -> dict:
     """Call a registered tool through MCP and return its parsed result."""
     handler = server._mcp_server.request_handlers[CallToolRequest]

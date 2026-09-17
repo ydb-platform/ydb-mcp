@@ -175,6 +175,33 @@ Use a `grpcs://` endpoint to connect over TLS. If the cluster certificate is iss
 }
 ```
 
+### Read-only Mode
+
+Start the server with `--ydb-access-mode read-only` to prevent queries from changing data or schema:
+
+```json
+{
+  "mcpServers": {
+    "ydb": {
+      "command": "uvx",
+      "args": [
+        "ydb-mcp",
+        "--ydb-endpoint", "grpc://localhost:2136",
+        "--ydb-database", "/local",
+        "--ydb-access-mode", "read-only"
+      ]
+    }
+  }
+}
+```
+
+The same setting can be provided through `YDB_ACCESS_MODE=read-only`. The default is `read-write` for backwards
+compatibility.
+
+Read-only queries are executed in native YDB snapshot read-only transactions. Write attempts are rejected by YDB
+itself, without relying on SQL text matching. The mode applies to both built-in query tools and custom tools that call
+`YDBMCPServer.execute()`.
+
 ## Available Tools
 
 YDB MCP provides the following tools for interacting with YDB databases:
