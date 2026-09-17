@@ -57,6 +57,42 @@ async def test_complex_query_multiple_resultsets(server):
     assert num_val == 2.5
 
 
+async def test_read_only_mode_allows_select(read_only_server):
+    result = await call_tool(read_only_server, "ydb_query", sql="SELECT 42 AS answer")
+
+    assert result["result_sets"][0]["rows"][0][0] == 42
+
+
+async def test_read_only_mode_rejects_write(server, read_only_server):
+    table = f"mcp_read_only_test_{int(time.time())}"
+    try:
+        schema_write = await call_tool(
+            read_only_server,
+            "ydb_query",
+            sql=f"CREATE TABLE {table} (id Uint64, PRIMARY KEY (id));",
+        )
+        assert "error" in schema_write
+
+        create_result = await call_tool(
+            server,
+            "ydb_query",
+            sql=f"CREATE TABLE {table} (id Uint64, PRIMARY KEY (id));",
+        )
+        assert "error" not in create_result
+
+        data_write = await call_tool(
+            read_only_server,
+            "ydb_query",
+            sql=f"UPSERT INTO {table} (id) VALUES (1);",
+        )
+
+        assert "error" in data_write
+        rows = await call_tool(read_only_server, "ydb_query", sql=f"SELECT * FROM {table};")
+        assert rows["result_sets"][0]["rows"] == []
+    finally:
+        await call_tool(server, "ydb_query", sql=f"DROP TABLE {table};")
+
+
 # ---------------------------------------------------------------------------
 # Table lifecycle
 # ---------------------------------------------------------------------------

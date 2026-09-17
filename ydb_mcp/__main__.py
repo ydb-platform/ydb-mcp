@@ -62,6 +62,12 @@ def main() -> None:
         action="store_true",
         help="Disable discovery of endpoints",
     )
+    parser.add_argument(
+        "--ydb-access-mode",
+        default=os.environ.get("YDB_ACCESS_MODE", "read-write"),
+        choices=["read-only", "read-write"],
+        help="Query access mode (overrides YDB_ACCESS_MODE env var)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -80,6 +86,7 @@ def main() -> None:
             sa_key_file=args.ydb_sa_key_file,
             root_certificates=args.ydb_root_certificates,
             disable_discovery=args.ydb_disable_discovery,
+            access_mode=args.ydb_access_mode,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

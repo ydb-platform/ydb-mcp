@@ -152,6 +152,18 @@ class TestYDBMCPServerInit:
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", disable_discovery=True)
         assert s.disable_discovery is True
 
+    def test_access_mode_defaults_to_read_write(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+        assert s.access_mode == "read-write"
+
+    def test_read_only_access_mode(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", access_mode="read-only")
+        assert s.access_mode == "read-only"
+
+    def test_invalid_access_mode(self):
+        with pytest.raises(ValueError, match="Unsupported access mode"):
+            YDBMCPServer(access_mode="invalid")
+
 
 # ---------------------------------------------------------------------------
 # Root CA certificates
@@ -251,6 +263,19 @@ class TestMain:
         )
         assert kwargs["disable_discovery"] is True
 
+    def test_access_mode_defaults_to_read_write(self):
+        kwargs = self._parse([])
+        assert kwargs["access_mode"] == "read-write"
+
+    def test_read_only_access_mode(self):
+        kwargs = self._parse(["--ydb-access-mode", "read-only"])
+        assert kwargs["access_mode"] == "read-only"
+
+    def test_access_mode_from_env(self, monkeypatch):
+        monkeypatch.setenv("YDB_ACCESS_MODE", "read-only")
+        kwargs = self._parse([])
+        assert kwargs["access_mode"] == "read-only"
+
     def test_root_certificates_path(self):
         kwargs = self._parse(["--ydb-root-certificates", "/etc/ssl/ca.pem"])
         assert kwargs["root_certificates"] == "/etc/ssl/ca.pem"
@@ -276,6 +301,13 @@ class TestGenericTools:
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
         tool_names = {t.name for t in s._tool_manager.list_tools()}
         assert tool_names == {t.value for t in YDBGenericTool}
+
+    def test_query_tool_descriptions_reflect_read_only_mode(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", access_mode="read-only")
+        tools = {tool.name: tool for tool in s._tool_manager.list_tools()}
+
+        assert "read-only" in tools[YDBGenericTool.QUERY.value].description
+        assert "read-only" in tools[YDBGenericTool.QUERY_WITH_PARAMS.value].description
 
     def test_generic_tools_disabled_in_subclass(self):
         class CustomServer(YDBMCPServer):
@@ -350,6 +382,32 @@ class TestExecute:
         await server.execute("SELECT $x", {"x": 42})
         call_args = mock_pool.execute_with_retries.call_args
         assert call_args[0][1] == {"$x": 42}
+
+    async def test_execute_read_only_uses_snapshot_transaction(self, server, mock_pool):
+        col = MagicMock()
+        col.name = "id"
+        result_set = MagicMock()
+        result_set.columns = [col]
+        result_set.rows = []
+
+        async def result_stream():
+            yield result_set
+
+        tx = MagicMock()
+        tx.execute = AsyncMock(return_value=result_stream())
+
+        async def retry_tx(callee, tx_mode):
+            assert isinstance(tx_mode, ydb.QuerySnapshotReadOnly)
+            return await callee(tx)
+
+        mock_pool.retry_tx_async.side_effect = retry_tx
+        server.access_mode = "read-only"
+
+        result = await server.execute("SELECT $x", {"x": 42})
+
+        tx.execute.assert_awaited_once_with("SELECT $x", {"$x": 42})
+        mock_pool.execute_with_retries.assert_not_awaited()
+        assert result == [{"columns": ["id"], "rows": []}]
 
     async def test_explain(self, server, mock_pool):
         mock_pool.explain_with_retries.return_value = {"plan": "data"}
@@ -527,6 +585,7 @@ class TestGenericToolHandlers:
         result = await self._call_tool(server, "ydb_status")
         data = json.loads(result[0].text)
         assert data["ydb_connection"] == "connected"
+        assert data["access_mode"] == "read-write"
         mock_driver.wait.assert_awaited_once_with(timeout=5.0)
         mock_driver.discovery_debug_details.assert_not_called()
 
