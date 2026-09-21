@@ -152,13 +152,13 @@ class TestYDBMCPServerInit:
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", disable_discovery=True)
         assert s.disable_discovery is True
 
-    def test_access_mode_defaults_to_read_write(self):
+    def test_access_mode_defaults_to_read_only(self):
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
-        assert s.access_mode == "read-write"
-
-    def test_read_only_access_mode(self):
-        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", access_mode="read-only")
         assert s.access_mode == "read-only"
+
+    def test_read_write_access_mode(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", access_mode="read-write")
+        assert s.access_mode == "read-write"
 
     def test_invalid_access_mode(self):
         with pytest.raises(ValueError, match="Unsupported access mode"):
@@ -263,18 +263,18 @@ class TestMain:
         )
         assert kwargs["disable_discovery"] is True
 
-    def test_access_mode_defaults_to_read_write(self):
+    def test_access_mode_defaults_to_read_only(self):
         kwargs = self._parse([])
+        assert kwargs["access_mode"] == "read-only"
+
+    def test_read_write_access_mode(self):
+        kwargs = self._parse(["--ydb-access-mode", "read-write"])
         assert kwargs["access_mode"] == "read-write"
 
-    def test_read_only_access_mode(self):
-        kwargs = self._parse(["--ydb-access-mode", "read-only"])
-        assert kwargs["access_mode"] == "read-only"
-
     def test_access_mode_from_env(self, monkeypatch):
-        monkeypatch.setenv("YDB_ACCESS_MODE", "read-only")
+        monkeypatch.setenv("YDB_ACCESS_MODE", "read-write")
         kwargs = self._parse([])
-        assert kwargs["access_mode"] == "read-only"
+        assert kwargs["access_mode"] == "read-write"
 
     def test_root_certificates_path(self):
         kwargs = self._parse(["--ydb-root-certificates", "/etc/ssl/ca.pem"])
@@ -303,7 +303,7 @@ class TestGenericTools:
         assert tool_names == {t.value for t in YDBGenericTool}
 
     def test_query_tool_descriptions_reflect_read_only_mode(self):
-        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", access_mode="read-only")
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
         tools = {tool.name: tool for tool in s._tool_manager.list_tools()}
 
         assert "read-only" in tools[YDBGenericTool.QUERY.value].description

@@ -60,8 +60,8 @@ class YDBMCPServer(FastMCP):
 
     Both are ``None`` until the first call to ``_ensure_connected()``.
 
-    Set ``access_mode="read-only"`` to execute all calls to ``execute()`` in
-    native YDB snapshot read-only transactions. The default is ``"read-write"``.
+    Calls to ``execute()`` run in native YDB snapshot read-only transactions by
+    default. Set ``access_mode="read-write"`` to explicitly allow write queries.
 
     Example — expose just two built-in tools plus a custom one::
 
@@ -98,7 +98,7 @@ class YDBMCPServer(FastMCP):
         sa_key_file: str | None = None,
         root_certificates: str | bytes | os.PathLike | None = None,
         disable_discovery: bool = False,
-        access_mode: str = "read-write",
+        access_mode: str = "read-only",
         **kwargs: Any,
     ) -> None:
         super().__init__("YDB MCP Server", **kwargs)

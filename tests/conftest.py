@@ -28,7 +28,7 @@ def server(mock_driver, mock_pool):
     """YDBMCPServer with mocked connection (no real YDB needed)."""
     from ydb_mcp.server import YDBMCPServer
 
-    s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+    s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", access_mode="read-write")
     s._driver = mock_driver
     s._pool = mock_pool
     return s

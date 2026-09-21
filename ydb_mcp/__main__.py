@@ -64,7 +64,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--ydb-access-mode",
-        default=os.environ.get("YDB_ACCESS_MODE", "read-write"),
+        default=os.environ.get("YDB_ACCESS_MODE", "read-only"),
         choices=["read-only", "read-write"],
         help="Query access mode (overrides YDB_ACCESS_MODE env var)",
     )
