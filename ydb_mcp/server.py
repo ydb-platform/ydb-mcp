@@ -15,7 +15,7 @@ from .tools import YDBGenericTool, register_generic_tools
 from .version import VERSION
 
 _AUTH_MODES = frozenset({"anonymous", "login-password", "access-token", "service-account"})
-_ACCESS_MODES = frozenset({"read-only", "read-write"})
+
 
 def _load_root_certificates(root_certificates: str | bytes | os.PathLike | None) -> bytes | None:
     """Read PEM-encoded root CA certificates for ``ydb.DriverConfig``.
@@ -61,7 +61,7 @@ class YDBMCPServer(FastMCP):
     Both are ``None`` until the first call to ``_ensure_connected()``.
 
     Calls to ``execute()`` run in native YDB snapshot read-only transactions by
-    default. Set ``access_mode="read-write"`` to explicitly allow write queries.
+    default. Set ``allow_write=True`` to explicitly allow write queries.
 
     Example — expose just two built-in tools plus a custom one::
 
@@ -98,7 +98,7 @@ class YDBMCPServer(FastMCP):
         sa_key_file: str | None = None,
         root_certificates: str | bytes | os.PathLike | None = None,
         disable_discovery: bool = False,
-        access_mode: str = "read-only",
+        allow_write: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__("YDB MCP Server", **kwargs)
@@ -113,11 +113,6 @@ class YDBMCPServer(FastMCP):
             raise ValueError("--ydb-access-token is required for access-token auth mode")
         if auth_mode == "service-account" and not sa_key_file:
             raise ValueError("--ydb-sa-key-file is required for service-account auth mode")
-        if access_mode not in _ACCESS_MODES:
-            raise ValueError(
-                f"Unsupported access mode: {access_mode!r}. Supported: {', '.join(sorted(_ACCESS_MODES))}"
-            )
-
         self.endpoint = endpoint or os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136")
         self.database = database or os.environ.get("YDB_DATABASE", "/local")
         self.auth_mode = auth_mode
@@ -127,7 +122,7 @@ class YDBMCPServer(FastMCP):
         self.sa_key_file = sa_key_file
         self.root_certificates = _load_root_certificates(root_certificates)
         self.disable_discovery = disable_discovery
-        self.access_mode = access_mode
+        self.allow_write = allow_write
 
         self._driver: ydb.aio.Driver | None = None
         self._pool: ydb.aio.QuerySessionPool | None = None
@@ -187,7 +182,7 @@ class YDBMCPServer(FastMCP):
         assert self._pool is not None
         ydb_params = _build_ydb_params(params) if params else None
 
-        if self.access_mode == "read-only":
+        if not self.allow_write:
 
             async def execute_read_only(tx: Any) -> list[Any]:
                 response = await tx.execute(sql, ydb_params)

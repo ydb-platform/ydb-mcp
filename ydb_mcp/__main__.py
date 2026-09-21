@@ -8,6 +8,10 @@ import sys
 from ydb_mcp.server import YDBMCPServer
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Model Context Protocol server for YDB")
     parser.add_argument(
@@ -63,10 +67,10 @@ def main() -> None:
         help="Disable discovery of endpoints",
     )
     parser.add_argument(
-        "--ydb-access-mode",
-        default=os.environ.get("YDB_ACCESS_MODE", "read-only"),
-        choices=["read-only", "read-write"],
-        help="Query access mode (overrides YDB_ACCESS_MODE env var)",
+        "--ydb-allow-write",
+        action="store_true",
+        default=_env_flag("YDB_ALLOW_WRITE"),
+        help="Allow write queries (also enabled by YDB_ALLOW_WRITE=true)",
     )
     args = parser.parse_args()
 
@@ -86,7 +90,7 @@ def main() -> None:
             sa_key_file=args.ydb_sa_key_file,
             root_certificates=args.ydb_root_certificates,
             disable_discovery=args.ydb_disable_discovery,
-            access_mode=args.ydb_access_mode,
+            allow_write=args.ydb_allow_write,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

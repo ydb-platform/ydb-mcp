@@ -55,7 +55,7 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
             "ydb_endpoint": server.endpoint,
             "ydb_database": server.database,
             "auth_mode": server.auth_mode,
-            "access_mode": server.access_mode,
+            "write_queries_enabled": server.allow_write,
         }
         try:
             await server._ensure_connected()
@@ -77,12 +77,12 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
 
     query_description = (
         "Run a read-only SQL query against YDB database"
-        if server.access_mode == "read-only"
+        if not server.allow_write
         else "Run a SQL query against YDB database"
     )
     parameterized_query_description = (
         "Run a read-only parameterized SQL query with JSON parameters"
-        if server.access_mode == "read-only"
+        if not server.allow_write
         else "Run a parameterized SQL query with JSON parameters"
     )
 

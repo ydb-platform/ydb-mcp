@@ -55,14 +55,14 @@ def ydb_server():
 async def server(ydb_server):
     """YDBMCPServer instance per test. Connection is established lazily on first use,
     inside the test's own event loop — avoiding gRPC cross-loop issues."""
-    s = YDBMCPServer(endpoint=YDB_ENDPOINT, database=YDB_DATABASE, access_mode="read-write")
+    s = YDBMCPServer(endpoint=YDB_ENDPOINT, database=YDB_DATABASE, allow_write=True)
     yield s
     await s.aclose()
 
 
 @pytest.fixture
 async def read_only_server(ydb_server):
-    """YDBMCPServer using the default read-only access mode."""
+    """YDBMCPServer using the default read-only query mode."""
     s = YDBMCPServer(endpoint=YDB_ENDPOINT, database=YDB_DATABASE)
     yield s
     await s.aclose()

@@ -152,17 +152,13 @@ class TestYDBMCPServerInit:
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", disable_discovery=True)
         assert s.disable_discovery is True
 
-    def test_access_mode_defaults_to_read_only(self):
+    def test_write_queries_disabled_by_default(self):
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
-        assert s.access_mode == "read-only"
+        assert s.allow_write is False
 
-    def test_read_write_access_mode(self):
-        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", access_mode="read-write")
-        assert s.access_mode == "read-write"
-
-    def test_invalid_access_mode(self):
-        with pytest.raises(ValueError, match="Unsupported access mode"):
-            YDBMCPServer(access_mode="invalid")
+    def test_write_queries_can_be_enabled(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", allow_write=True)
+        assert s.allow_write is True
 
 
 # ---------------------------------------------------------------------------
@@ -263,18 +259,25 @@ class TestMain:
         )
         assert kwargs["disable_discovery"] is True
 
-    def test_access_mode_defaults_to_read_only(self):
+    def test_write_queries_disabled_by_default(self):
         kwargs = self._parse([])
-        assert kwargs["access_mode"] == "read-only"
+        assert kwargs["allow_write"] is False
 
-    def test_read_write_access_mode(self):
-        kwargs = self._parse(["--ydb-access-mode", "read-write"])
-        assert kwargs["access_mode"] == "read-write"
+    def test_allow_write_flag(self):
+        kwargs = self._parse(["--ydb-allow-write"])
+        assert kwargs["allow_write"] is True
 
-    def test_access_mode_from_env(self, monkeypatch):
-        monkeypatch.setenv("YDB_ACCESS_MODE", "read-write")
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+    def test_allow_write_from_env(self, monkeypatch, value):
+        monkeypatch.setenv("YDB_ALLOW_WRITE", value)
         kwargs = self._parse([])
-        assert kwargs["access_mode"] == "read-write"
+        assert kwargs["allow_write"] is True
+
+    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off"])
+    def test_allow_write_disabled_by_env(self, monkeypatch, value):
+        monkeypatch.setenv("YDB_ALLOW_WRITE", value)
+        kwargs = self._parse([])
+        assert kwargs["allow_write"] is False
 
     def test_root_certificates_path(self):
         kwargs = self._parse(["--ydb-root-certificates", "/etc/ssl/ca.pem"])
@@ -401,7 +404,7 @@ class TestExecute:
             return await callee(tx)
 
         mock_pool.retry_tx_async.side_effect = retry_tx
-        server.access_mode = "read-only"
+        server.allow_write = False
 
         result = await server.execute("SELECT $x", {"x": 42})
 
@@ -585,7 +588,7 @@ class TestGenericToolHandlers:
         result = await self._call_tool(server, "ydb_status")
         data = json.loads(result[0].text)
         assert data["ydb_connection"] == "connected"
-        assert data["access_mode"] == "read-write"
+        assert data["write_queries_enabled"] is True
         mock_driver.wait.assert_awaited_once_with(timeout=5.0)
         mock_driver.discovery_debug_details.assert_not_called()
 
