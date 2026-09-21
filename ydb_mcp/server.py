@@ -16,6 +16,7 @@ from .version import VERSION
 
 _AUTH_MODES = frozenset({"anonymous", "login-password", "access-token", "service-account"})
 
+
 def _load_root_certificates(root_certificates: str | bytes | os.PathLike | None) -> bytes | None:
     """Read PEM-encoded root CA certificates for ``ydb.DriverConfig``.
 
@@ -59,6 +60,9 @@ class YDBMCPServer(FastMCP):
 
     Both are ``None`` until the first call to ``_ensure_connected()``.
 
+    Calls to ``execute()`` run in native YDB snapshot read-only transactions by
+    default. Set ``allow_write=True`` to explicitly allow write queries.
+
     Example — expose just two built-in tools plus a custom one::
 
         from ydb_mcp import serialize_ydb_response
@@ -94,6 +98,7 @@ class YDBMCPServer(FastMCP):
         sa_key_file: str | None = None,
         root_certificates: str | bytes | os.PathLike | None = None,
         disable_discovery: bool = False,
+        allow_write: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__("YDB MCP Server", **kwargs)
@@ -108,7 +113,6 @@ class YDBMCPServer(FastMCP):
             raise ValueError("--ydb-access-token is required for access-token auth mode")
         if auth_mode == "service-account" and not sa_key_file:
             raise ValueError("--ydb-sa-key-file is required for service-account auth mode")
-
         self.endpoint = endpoint or os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136")
         self.database = database or os.environ.get("YDB_DATABASE", "/local")
         self.auth_mode = auth_mode
@@ -118,6 +122,7 @@ class YDBMCPServer(FastMCP):
         self.sa_key_file = sa_key_file
         self.root_certificates = _load_root_certificates(root_certificates)
         self.disable_discovery = disable_discovery
+        self.allow_write = allow_write
 
         self._driver: ydb.aio.Driver | None = None
         self._pool: ydb.aio.QuerySessionPool | None = None
@@ -176,7 +181,19 @@ class YDBMCPServer(FastMCP):
         await self._ensure_connected()
         assert self._pool is not None
         ydb_params = _build_ydb_params(params) if params else None
-        result_sets = await self._pool.execute_with_retries(sql, ydb_params)
+
+        if not self.allow_write:
+
+            async def execute_read_only(tx: Any) -> list[Any]:
+                response = await tx.execute(sql, ydb_params)
+                return [result_set async for result_set in response]
+
+            result_sets = await self._pool.retry_tx_async(
+                execute_read_only,
+                tx_mode=ydb.QuerySnapshotReadOnly(),
+            )
+        else:
+            result_sets = await self._pool.execute_with_retries(sql, ydb_params)
         return [_process_result_set(rs) for rs in result_sets]
 
     async def explain(self, sql: str, params: dict | None = None) -> dict:

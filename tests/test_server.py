@@ -152,6 +152,14 @@ class TestYDBMCPServerInit:
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", disable_discovery=True)
         assert s.disable_discovery is True
 
+    def test_write_queries_disabled_by_default(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+        assert s.allow_write is False
+
+    def test_write_queries_can_be_enabled(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", allow_write=True)
+        assert s.allow_write is True
+
 
 # ---------------------------------------------------------------------------
 # Root CA certificates
@@ -251,6 +259,27 @@ class TestMain:
         )
         assert kwargs["disable_discovery"] is True
 
+    def test_write_queries_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("YDB_ALLOW_WRITE", raising=False)
+        kwargs = self._parse([])
+        assert kwargs["allow_write"] is False
+
+    def test_allow_write_flag(self):
+        kwargs = self._parse(["--ydb-allow-write"])
+        assert kwargs["allow_write"] is True
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+    def test_allow_write_from_env(self, monkeypatch, value):
+        monkeypatch.setenv("YDB_ALLOW_WRITE", value)
+        kwargs = self._parse([])
+        assert kwargs["allow_write"] is True
+
+    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off"])
+    def test_allow_write_disabled_by_env(self, monkeypatch, value):
+        monkeypatch.setenv("YDB_ALLOW_WRITE", value)
+        kwargs = self._parse([])
+        assert kwargs["allow_write"] is False
+
     def test_root_certificates_path(self):
         kwargs = self._parse(["--ydb-root-certificates", "/etc/ssl/ca.pem"])
         assert kwargs["root_certificates"] == "/etc/ssl/ca.pem"
@@ -276,6 +305,20 @@ class TestGenericTools:
         s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
         tool_names = {t.name for t in s._tool_manager.list_tools()}
         assert tool_names == {t.value for t in YDBGenericTool}
+
+    def test_query_tool_descriptions_reflect_read_only_mode(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+        tools = {tool.name: tool for tool in s._tool_manager.list_tools()}
+
+        assert "read-only" in tools[YDBGenericTool.QUERY.value].description
+        assert "read-only" in tools[YDBGenericTool.QUERY_WITH_PARAMS.value].description
+
+    def test_query_tool_descriptions_reflect_write_enabled_mode(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", allow_write=True)
+        tools = {tool.name: tool for tool in s._tool_manager.list_tools()}
+
+        assert "writes enabled" in tools[YDBGenericTool.QUERY.value].description
+        assert "writes enabled" in tools[YDBGenericTool.QUERY_WITH_PARAMS.value].description
 
     def test_generic_tools_disabled_in_subclass(self):
         class CustomServer(YDBMCPServer):
@@ -350,6 +393,32 @@ class TestExecute:
         await server.execute("SELECT $x", {"x": 42})
         call_args = mock_pool.execute_with_retries.call_args
         assert call_args[0][1] == {"$x": 42}
+
+    async def test_execute_read_only_uses_snapshot_transaction(self, server, mock_pool):
+        col = MagicMock()
+        col.name = "id"
+        result_set = MagicMock()
+        result_set.columns = [col]
+        result_set.rows = []
+
+        async def result_stream():
+            yield result_set
+
+        tx = MagicMock()
+        tx.execute = AsyncMock(return_value=result_stream())
+
+        async def retry_tx(callee, tx_mode):
+            assert isinstance(tx_mode, ydb.QuerySnapshotReadOnly)
+            return await callee(tx)
+
+        mock_pool.retry_tx_async.side_effect = retry_tx
+        server.allow_write = False
+
+        result = await server.execute("SELECT $x", {"x": 42})
+
+        tx.execute.assert_awaited_once_with("SELECT $x", {"$x": 42})
+        mock_pool.execute_with_retries.assert_not_awaited()
+        assert result == [{"columns": ["id"], "rows": []}]
 
     async def test_explain(self, server, mock_pool):
         mock_pool.explain_with_retries.return_value = {"plan": "data"}
@@ -527,6 +596,7 @@ class TestGenericToolHandlers:
         result = await self._call_tool(server, "ydb_status")
         data = json.loads(result[0].text)
         assert data["ydb_connection"] == "connected"
+        assert data["write_queries_enabled"] is True
         mock_driver.wait.assert_awaited_once_with(timeout=5.0)
         mock_driver.discovery_debug_details.assert_not_called()
 

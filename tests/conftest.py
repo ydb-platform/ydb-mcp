@@ -9,6 +9,7 @@ import pytest
 def mock_pool():
     pool = AsyncMock()
     pool.execute_with_retries = AsyncMock(return_value=[])
+    pool.retry_tx_async = AsyncMock(return_value=[])
     pool.explain_with_retries = AsyncMock(return_value={})
     return pool
 
@@ -27,7 +28,7 @@ def server(mock_driver, mock_pool):
     """YDBMCPServer with mocked connection (no real YDB needed)."""
     from ydb_mcp.server import YDBMCPServer
 
-    s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local")
+    s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", allow_write=True)
     s._driver = mock_driver
     s._pool = mock_pool
     return s
