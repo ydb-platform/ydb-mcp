@@ -1,3 +1,4 @@
+## 0.3.0 ##
 * Make queries read-only by default with explicit write opt-in
 
 ## 0.2.2 ##
