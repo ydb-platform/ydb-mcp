@@ -259,7 +259,8 @@ class TestMain:
         )
         assert kwargs["disable_discovery"] is True
 
-    def test_write_queries_disabled_by_default(self):
+    def test_write_queries_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("YDB_ALLOW_WRITE", raising=False)
         kwargs = self._parse([])
         assert kwargs["allow_write"] is False
 
@@ -311,6 +312,13 @@ class TestGenericTools:
 
         assert "read-only" in tools[YDBGenericTool.QUERY.value].description
         assert "read-only" in tools[YDBGenericTool.QUERY_WITH_PARAMS.value].description
+
+    def test_query_tool_descriptions_reflect_write_enabled_mode(self):
+        s = YDBMCPServer(endpoint="grpc://localhost:2136", database="/local", allow_write=True)
+        tools = {tool.name: tool for tool in s._tool_manager.list_tools()}
+
+        assert "writes enabled" in tools[YDBGenericTool.QUERY.value].description
+        assert "writes enabled" in tools[YDBGenericTool.QUERY_WITH_PARAMS.value].description
 
     def test_generic_tools_disabled_in_subclass(self):
         class CustomServer(YDBMCPServer):

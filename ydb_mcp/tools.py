@@ -78,12 +78,12 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
     query_description = (
         "Run a read-only SQL query against YDB database"
         if not server.allow_write
-        else "Run a SQL query against YDB database"
+        else "Run a SQL query against YDB database (writes enabled)"
     )
     parameterized_query_description = (
         "Run a read-only parameterized SQL query with JSON parameters"
         if not server.allow_write
-        else "Run a parameterized SQL query with JSON parameters"
+        else "Run a parameterized SQL query with JSON parameters (writes enabled)"
     )
 
     for tool, fn, description in [
