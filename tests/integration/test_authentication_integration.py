@@ -34,6 +34,7 @@ async def test_login_password_authentication(server):
         assert "error" not in r, f"Could not create user: {r}"
 
         import asyncio
+
         await asyncio.sleep(1)  # wait for user creation to propagate
 
         # Connect with correct credentials

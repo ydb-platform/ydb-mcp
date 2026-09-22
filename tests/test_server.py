@@ -79,6 +79,7 @@ class TestBuildYdbParams:
 
     def test_ydb_type_tuple(self):
         import ydb
+
         result = _build_ydb_params({"id": (42, "Int32")})
         assert result["$id"] == ydb.TypedValue(42, ydb.PrimitiveType.Int32)
 

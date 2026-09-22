@@ -28,10 +28,7 @@ async def test_list_directory_after_table_creation(server):
     db = server.database.rstrip("/")
     table = f"path_test_{int(time.time())}"
     try:
-        r = await call_tool(
-            server, "ydb_query",
-            sql=f"CREATE TABLE {table} (id Uint64, name Utf8, PRIMARY KEY (id));"
-        )
+        r = await call_tool(server, "ydb_query", sql=f"CREATE TABLE {table} (id Uint64, name Utf8, PRIMARY KEY (id));")
         assert "error" not in r, f"Error creating table: {r}"
         await asyncio.sleep(1)
 

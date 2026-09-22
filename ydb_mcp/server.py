@@ -89,6 +89,7 @@ class YDBMCPServer(FastMCP):
 
     def __init__(
         self,
+        connection_string: str | None = None,
         endpoint: str | None = None,
         database: str | None = None,
         auth_mode: str = "anonymous",
@@ -104,15 +105,14 @@ class YDBMCPServer(FastMCP):
         super().__init__("YDB MCP Server", **kwargs)
 
         if auth_mode not in _AUTH_MODES:
-            raise ValueError(
-                f"Unsupported auth mode: {auth_mode!r}. Supported: {', '.join(sorted(_AUTH_MODES))}"
-            )
+            raise ValueError(f"Unsupported auth mode: {auth_mode!r}. Supported: {', '.join(sorted(_AUTH_MODES))}")
         if auth_mode == "login-password" and not (login and password):
             raise ValueError("--ydb-login and --ydb-password are required for login-password auth mode")
         if auth_mode == "access-token" and not access_token:
             raise ValueError("--ydb-access-token is required for access-token auth mode")
         if auth_mode == "service-account" and not sa_key_file:
             raise ValueError("--ydb-sa-key-file is required for service-account auth mode")
+        self.connection_string = connection_string
         self.endpoint = endpoint or os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136")
         self.database = database or os.environ.get("YDB_DATABASE", "/local")
         self.auth_mode = auth_mode
@@ -150,14 +150,21 @@ class YDBMCPServer(FastMCP):
         async with self._connect_lock:
             if self._driver is not None:
                 return
-            config = ydb.DriverConfig(
-                endpoint=self.endpoint,
-                database=self.database,
-                credentials=self._build_credentials(),
-                root_certificates=self.root_certificates,
-                disable_discovery=self.disable_discovery,
-                _additional_sdk_headers=(f"ydb-mcp/{VERSION}",),
-            )
+
+            driver_config_kwargs = {
+                "credentials": self._build_credentials(),
+                "root_certificates": self.root_certificates,
+                "disable_discovery": self.disable_discovery,
+                "_additional_sdk_headers": (f"ydb-mcp/{VERSION}",),
+            }
+
+            if self.connection_string:
+                driver_config_kwargs["connection_string"] = self.connection_string
+            else:
+                driver_config_kwargs["endpoint"] = self.endpoint
+                driver_config_kwargs["database"] = self.database
+
+            config = ydb.DriverConfig(**driver_config_kwargs)
             driver = ydb.aio.Driver(config)
             try:
                 await driver.wait(timeout=5.0)
@@ -226,8 +233,7 @@ class YDBMCPServer(FastMCP):
             }
             if getattr(entry, "permissions", None):
                 item["permissions"] = [
-                    {"subject": p.subject, "permission_names": list(p.permission_names)}
-                    for p in entry.permissions
+                    {"subject": p.subject, "permission_names": list(p.permission_names)} for p in entry.permissions
                 ]
             items.append(item)
         items.sort(key=lambda x: x["name"])
@@ -253,8 +259,7 @@ class YDBMCPServer(FastMCP):
         }
         if getattr(response, "permissions", None):
             result["permissions"] = [
-                {"subject": p.subject, "permission_names": list(p.permission_names)}
-                for p in response.permissions
+                {"subject": p.subject, "permission_names": list(p.permission_names)} for p in response.permissions
             ]
         if ydb.SchemeEntryType.is_any_table(entry_type):
             result["table"] = await self._describe_table(path)
@@ -266,10 +271,7 @@ class YDBMCPServer(FastMCP):
         try:
             desc = await session.describe_table(path)
             return {
-                "columns": [
-                    {"name": col.name, "type": str(col.type), "family": col.family}
-                    for col in desc.columns
-                ],
+                "columns": [{"name": col.name, "type": str(col.type), "family": col.family} for col in desc.columns],
                 "primary_key": list(desc.primary_key),
                 "indexes": [
                     {
