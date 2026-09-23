@@ -250,6 +250,19 @@ class TestMain:
                 main()
         return mock_cls.call_args.kwargs
 
+    def test_connection_string_flag(self):
+        kwargs = self._parse(["--ydb-connection-string", "grpc://localhost:2136/root"])
+        assert kwargs["connection_string"] == "grpc://localhost:2136/root"
+
+    def test_connection_string_from_env(self, monkeypatch):
+        monkeypatch.setenv("YDB_CONNECTION_STRING", "grpc://env-host:2136/root")
+        kwargs = self._parse([])
+        assert kwargs["connection_string"] == "grpc://env-host:2136/root"
+
+    def test_connection_string_not_set_when_only_old_api_flags(self):
+        kwargs = self._parse(["--ydb-endpoint", "grpc://localhost:2136", "--ydb-database", "/local"])
+        assert kwargs["ydb-connection-string"] is None
+
     def test_disable_discovery_not_set_by_default(self):
         kwargs = self._parse(["--ydb-endpoint", "grpc://localhost:2136", "--ydb-database", "/local"])
         assert kwargs["disable_discovery"] is False
