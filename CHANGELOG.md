@@ -1,3 +1,5 @@
+* Add support for configuring YDB with the `--ydb-connection-string` argument and `YDB_CONNECTION_STRING` environment variable
+
 ## 0.3.0 ##
 * Make queries read-only by default with explicit write opt-in
 

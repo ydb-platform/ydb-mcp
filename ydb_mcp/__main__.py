@@ -25,6 +25,11 @@ def main() -> None:
         help="YDB database path (overrides YDB_DATABASE env var)",
     )
     parser.add_argument(
+        "--ydb-connection-string",
+        default=os.environ.get("YDB_CONNECTION_STRING"),
+        help="YDB connection string (overrides YDB_CONNECTION_STRING env var)",
+    )
+    parser.add_argument(
         "--ydb-auth-mode",
         default=os.environ.get("YDB_AUTH_MODE", "anonymous"),
         choices=["anonymous", "login-password", "access-token", "service-account"],
@@ -81,6 +86,7 @@ def main() -> None:
 
     try:
         server = YDBMCPServer(
+            connection_string=args.ydb_connection_string,
             endpoint=args.ydb_endpoint,
             database=args.ydb_database,
             auth_mode=args.ydb_auth_mode,

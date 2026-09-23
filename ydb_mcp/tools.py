@@ -90,8 +90,11 @@ def register_generic_tools(server: "YDBMCPServer", enabled: set[YDBGenericTool])
         (YDBGenericTool.QUERY, ydb_query, query_description),
         (YDBGenericTool.QUERY_WITH_PARAMS, ydb_query_with_params, parameterized_query_description),
         (YDBGenericTool.EXPLAIN, ydb_explain_query, "Explain a SQL query against YDB"),
-        (YDBGenericTool.EXPLAIN_WITH_PARAMS, ydb_explain_query_with_params,
-         "Explain a parameterized SQL query against YDB"),
+        (
+            YDBGenericTool.EXPLAIN_WITH_PARAMS,
+            ydb_explain_query_with_params,
+            "Explain a parameterized SQL query against YDB",
+        ),
         (YDBGenericTool.STATUS, ydb_status, "Get the current YDB connection status"),
         (YDBGenericTool.LIST_DIRECTORY, ydb_list_directory, "List directory contents in YDB"),
         (YDBGenericTool.DESCRIBE_PATH, ydb_describe_path, "Get detailed information about a YDB path"),

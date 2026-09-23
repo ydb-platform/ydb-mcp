@@ -101,15 +101,11 @@ async def test_read_only_mode_rejects_write(server, read_only_server):
 async def test_create_table_insert_query_drop(server):
     table = f"mcp_test_{int(time.time())}"
     try:
-        r = await call_tool(
-            server, "ydb_query",
-            sql=f"CREATE TABLE {table} (id Uint64, name Utf8, PRIMARY KEY (id));"
-        )
+        r = await call_tool(server, "ydb_query", sql=f"CREATE TABLE {table} (id Uint64, name Utf8, PRIMARY KEY (id));")
         assert "error" not in r
 
         r = await call_tool(
-            server, "ydb_query",
-            sql=f"UPSERT INTO {table} (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol');"
+            server, "ydb_query", sql=f"UPSERT INTO {table} (id, name) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol');"
         )
         assert "error" not in r
 
@@ -128,28 +124,30 @@ async def test_multiple_resultsets_with_join(server):
     t1 = f"mcp_t1_{int(time.time())}"
     t2 = f"mcp_t2_{int(time.time())}"
     try:
-        await call_tool(server, "ydb_query", sql=(
-            f"CREATE TABLE {t1} (id Uint64, name Utf8, PRIMARY KEY (id));"
-            f"CREATE TABLE {t2} (id Uint64, value Double, PRIMARY KEY (id));"
-        ))
-        await call_tool(server, "ydb_query", sql=(
-            f"UPSERT INTO {t1} (id, name) VALUES (1, 'First'), (2, 'Second'), (3, 'Third');"
-        ))
-        await call_tool(server, "ydb_query", sql=(
-            f"UPSERT INTO {t2} (id, value) VALUES (1, 10.5), (2, 20.75), (3, 30.25);"
-        ))
-
-        r = await call_tool(
-            server, "ydb_query",
-            sql=f"SELECT * FROM {t1} ORDER BY id; SELECT * FROM {t2} ORDER BY id;"
+        await call_tool(
+            server,
+            "ydb_query",
+            sql=(
+                f"CREATE TABLE {t1} (id Uint64, name Utf8, PRIMARY KEY (id));"
+                f"CREATE TABLE {t2} (id Uint64, value Double, PRIMARY KEY (id));"
+            ),
         )
+        await call_tool(
+            server, "ydb_query", sql=(f"UPSERT INTO {t1} (id, name) VALUES (1, 'First'), (2, 'Second'), (3, 'Third');")
+        )
+        await call_tool(
+            server, "ydb_query", sql=(f"UPSERT INTO {t2} (id, value) VALUES (1, 10.5), (2, 20.75), (3, 30.25);")
+        )
+
+        r = await call_tool(server, "ydb_query", sql=f"SELECT * FROM {t1} ORDER BY id; SELECT * FROM {t2} ORDER BY id;")
         assert len(r["result_sets"]) == 2
         assert len(r["result_sets"][0]["rows"]) == 3
         assert len(r["result_sets"][1]["rows"]) == 3
 
         join = await call_tool(
-            server, "ydb_query",
-            sql=f"SELECT t1.id, t1.name, t2.value FROM {t1} t1 JOIN {t2} t2 ON t1.id = t2.id ORDER BY t1.id;"
+            server,
+            "ydb_query",
+            sql=f"SELECT t1.id, t1.name, t2.value FROM {t1} t1 JOIN {t2} t2 ON t1.id = t2.id ORDER BY t1.id;",
         )
         rs = join["result_sets"][0]
         assert len(rs["rows"]) == 3
@@ -166,6 +164,7 @@ async def test_multiple_resultsets_with_join(server):
 
 async def test_parameterized_query(server):
     import json
+
     result = await call_tool(
         server,
         "ydb_query_with_params",
@@ -322,8 +321,7 @@ async def test_describe_path_table(server):
     table = f"mcp_describe_{int(time.time())}"
     try:
         await call_tool(
-            server, "ydb_query",
-            sql=f"CREATE TABLE {table} (id Uint64, name Utf8, value Double, PRIMARY KEY (id));"
+            server, "ydb_query", sql=f"CREATE TABLE {table} (id Uint64, name Utf8, value Double, PRIMARY KEY (id));"
         )
         await asyncio.sleep(1)
 
@@ -347,10 +345,7 @@ async def test_list_directory_after_table_creation(server):
     table = f"mcp_dir_test_{int(time.time())}"
     db = server.database.rstrip("/")
     try:
-        await call_tool(
-            server, "ydb_query",
-            sql=f"CREATE TABLE {table} (id Uint64, PRIMARY KEY (id));"
-        )
+        await call_tool(server, "ydb_query", sql=f"CREATE TABLE {table} (id Uint64, PRIMARY KEY (id));")
         await asyncio.sleep(1)
 
         for _ in range(5):
